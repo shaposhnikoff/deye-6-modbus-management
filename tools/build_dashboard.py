@@ -100,33 +100,6 @@ def stat(
     }
 
 
-def table(title: str, grid: tuple[int, int, int, int], expr: str | None = None) -> dict:
-    x, y, w, h = grid
-    return {
-        "type": "table",
-        "title": title,
-        "description": "Every exported gauge, for ad-hoc inspection.",
-        "datasource": DATASOURCE,
-        "gridPos": {"x": x, "y": y, "w": w, "h": h},
-        "fieldConfig": {"defaults": {"custom": {"align": "auto"}}, "overrides": []},
-        "options": {"showHeader": True, "sortBy": [{"displayName": "Time", "desc": True}]},
-        "targets": [
-            {
-                "datasource": DATASOURCE,
-                "expr": expr or '{__name__=~"deye_.*", job="deye-modbus"}',
-                "format": "table",
-                "instant": True,
-                "legendFormat": "__auto",
-                "refId": "A",
-            }
-        ],
-        "transformations": [
-            {"id": "labelsToFields", "options": {}},
-            {"id": "organize", "options": {"excludeByName": {"Time": True, "job": True}}},
-        ],
-    }
-
-
 def tou_table(grid: tuple[int, int, int, int]) -> dict:
     """One row per Time-of-Use slot, built from the deye_tou_slot_info label set."""
     x, y, w, h = grid
@@ -356,7 +329,6 @@ def build() -> dict:
             (12, 29, 12, 6),
             "kwatth",
         ),
-        table("All exported metrics", (0, 35, 24, 10)),
         tou_table((0, 45, 24, 10)),
     ]
 
