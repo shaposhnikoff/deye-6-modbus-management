@@ -2,10 +2,35 @@
 
 from __future__ import annotations
 
+import json
+import pathlib
 import time
+
+import pytest
 
 from deye_monitoring.collector import Collector
 from deye_monitoring.snapshot import Reading
+
+FIXTURE = pathlib.Path(__file__).parent / "fixtures" / "raw_registers.json"
+
+
+@pytest.fixture(scope="module")
+def registers() -> dict[int, int]:
+    raw = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    return {int(address, 16): value for address, value in raw.items()}
+
+
+class FakeSerialContext:
+    """Minimal stand-in for ModbusClient used as a context manager."""
+
+    def __init__(self, *_args: object, **_kwargs: object) -> None:
+        pass
+
+    def __enter__(self) -> FakeSerialContext:
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        return None
 
 
 class FakeReader:
@@ -94,3 +119,15 @@ def test_listener_failure_does_not_break_polling() -> None:
 
     collector = Collector(FakeReader(), on_sample=broken_listener)
     assert collector.poll_once().error is None
+
+
+def test_modbus_reader_includes_the_tou_block(monkeypatch, registers: dict[int, int]) -> None:
+    from deye_monitoring import collector as collector_module
+    from deye_monitoring.modbus import ModbusConfig
+
+    monkeypatch.setattr("deye_monitoring.modbus.ModbusClient", FakeSerialContext)
+    monkeypatch.setattr(collector_module, "read_registers", lambda _client: registers)
+    reader = collector_module.modbus_reader(ModbusConfig(port="fake"))
+    readings, serial = reader()
+    assert serial == "2601255637"
+    assert any(reading.metric == "deye_tou_enabled" for reading in readings)

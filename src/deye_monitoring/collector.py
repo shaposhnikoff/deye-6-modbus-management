@@ -9,7 +9,7 @@ from collections.abc import Callable
 
 from deye_monitoring.exporter import Sample
 from deye_monitoring.modbus import ModbusConfig
-from deye_monitoring.snapshot import Reading, decode, read_registers, serial_number
+from deye_monitoring.snapshot import Reading, decode_all, read_registers, serial_number
 
 LOGGER = logging.getLogger(__name__)
 
@@ -28,7 +28,8 @@ def modbus_reader(config: ModbusConfig) -> Reader:
 
         with ModbusClient(config) as client:
             registers = read_registers(client)
-        return decode(registers), serial_number(registers)
+        readings, _tou_state = decode_all(registers)
+        return readings, serial_number(registers)
 
     return read
 
