@@ -1,4 +1,4 @@
-# DEYE Monitoring Roadmap: Prometheus exporter, MQTT/HA, alerts, guarded writes
+# DEYEMonitoring Roadmap: Prometheus exporter, MQTT/HA, alerts, guarded writes
 
 > **For the implementing agent:** follow this plan task by task, tests first. Every task ends with a green test run and a commit.
 
@@ -10,7 +10,7 @@
 
 **Deployment constraint:** all Prometheus, Grafana and Alertmanager configuration lives in the `Monitoring/` directory of this repository. The operator copies it wherever it belongs; the plan assumes no writable config directory and no specific host layout. The Mosquitto host is unknown, so every MQTT and Telegram setting arrives through environment variables and the exporter must work without them.
 
-**Already in place:** repository `shaposhnikoff/deye-6-modbus-management`, package `deye_monitoring` with FC3-only client, generated register map, CLI `dmon read|json|dump|watch`, 18 tests, udev rule giving `/dev/modbus`, working on the Pi at `/home/max/DEYE Monitoring`.
+**Already in place:** repository `shaposhnikoff/deye-6-modbus-management`, package `deye_monitoring` with FC3-only client, generated register map, CLI `dmon read|json|dump|watch`, 18 tests, udev rule giving `/dev/modbus`, working on the Pi at `/home/max/DEYEMonitoring`.
 
 ---
 
@@ -218,7 +218,7 @@ def test_unknown_path_returns_404(server):
 **Step 3: Run on the Pi**
 
 ```bash
-cd "/home/max/DEYE Monitoring" && uv run dmon serve --listen 0.0.0.0:9101 &
+cd "/home/max/DEYEMonitoring" && uv run dmon serve --listen 0.0.0.0:9101 &
 curl -s localhost:9101/metrics | head -20
 curl -s localhost:9101/health
 ```
@@ -310,7 +310,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=max
-WorkingDirectory=/home/max/DEYE Monitoring
+WorkingDirectory=/home/max/DEYEMonitoring
 EnvironmentFile=-/etc/deye-monitoring.env
 ExecStart=/home/max/.local/bin/uv run dmon serve --listen 0.0.0.0:9101 --interval 10
 Restart=always

@@ -1,4 +1,4 @@
-# DEYE Monitoring
+# DEYEMonitoring
 
 Read-only Modbus RTU monitoring for a Deye hybrid inverter (validated on `SUN-6K`, single phase)
 running on a Raspberry Pi over a Waveshare USB↔RS232/485 adapter.
@@ -78,13 +78,13 @@ systemctl status deye-monitoring
 journalctl -u deye-monitoring -f
 ```
 
-Two details that bite on this host:
+Why the unit looks the way it does:
 
-- The repository path contains a space (`/home/max/DEYE Monitoring`), and systemd does **not**
-  accept a quoted `WorkingDirectory`. The unit therefore runs from `/home/max` with an absolute,
-  quoted `ExecStart`, which needs no working directory.
 - `ExecStart` points at the venv entry point (`.venv/bin/dmon`), not at `uv run`. The venv script
-  is a `/bin/sh` trampoline, so signals reach the collector and it shuts down cleanly.
+  is a `/bin/sh` trampoline, so SIGTERM reaches the collector and it stops cleanly instead of
+  leaving the serial port locked.
+- `WorkingDirectory=/home/max` is only there for a predictable cwd; every path the service uses
+  is absolute.
 
 Optional settings live in `/etc/deye-monitoring.env` (`DEYE_LISTEN`, `DEYE_INTERVAL`,
 `DEYE_PORT`, Telegram variables); every one of them has a built-in default.
