@@ -118,6 +118,20 @@ Alerts: Modbus reads failing, stale data, over-temperature, running status `faul
 A `RECOVERED` message is sent when an alert clears, and a cooldown keeps a flapping line from
 spamming the chat. Without a token the service logs `telegram disabled` and keeps monitoring.
 
+## Writing (Time-of-Use)
+
+Monitoring stays read-only. Changing the schedule is a separate, explicit command:
+
+```bash
+uv run dmon-write list                                        # current values, read-only
+uv run dmon-write plan tou.1.power=5500                       # validate only
+uv run dmon-write set tou.1.power=5500 --confirm              # write + readback + audit
+```
+
+Every write is range-checked, read back from the inverter and appended to
+`/var/log/deye/writes.log`. Bit targets (grid/gen charge) use read-modify-write so the GM/BU/CH
+bits survive. See [docs/WRITES.md](docs/WRITES.md) for the allow-list, formats and exit codes.
+
 ## Register map
 
 `src/deye_monitoring/registers.py` is generated — do not edit it by hand:
@@ -156,7 +170,10 @@ src/deye_monitoring/
   registers.py   # generated register map (63 registers)
   snapshot.py    # block reads, decoding, serial number
   enums.py       # status enums (running status)
-  cli.py         # read / json / dump / watch
+  cli.py         # read / json / dump / watch / serve
+  tou.py         # Time-of-Use decoder (slots, charge bits)
+  write.py       # guarded writes, allow-list, readback, audit
+  write_cli.py   # dmon-write list / plan / set
 tools/
   generate_registers.py  # regenerates registers.py from the vendored map
   upstream-map/*.yaml    # vendored ESPHome register definitions
