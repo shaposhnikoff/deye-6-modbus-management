@@ -14,7 +14,6 @@ from deye_monitoring.mqtt import (
     node_id,
     state_payload,
 )
-from deye_monitoring.registers import REGISTERS
 from deye_monitoring.snapshot import Reading
 
 SERIAL = "2601255637"
@@ -61,6 +60,10 @@ def _sample() -> Sample:
     return Sample(readings=readings, serial=SERIAL, duration=0.2, last_success=time.time())
 
 
+VALUES = {"PV1 Power": 654.0, "Battery": 89.0}
+RUNNING = {"Running Status": 2.0}
+
+
 def _config() -> MqttConfig:
     return MqttConfig(host="broker", port=1883, node="deye_6k")
 
@@ -92,23 +95,23 @@ def test_state_payload_includes_tou_and_error() -> None:
     assert payload["tou"] == {"enabled": True}
 
 
-def test_discovery_covers_registers_and_skips_status() -> None:
-    configs = discovery_configs(SERIAL, _config())
-    assert len(configs) == len(REGISTERS) - 1
+def test_discovery_covers_published_values_and_skips_status() -> None:
+    configs = discovery_configs({**VALUES, **RUNNING}, SERIAL, _config())
+    assert len(configs) == 2
     topic = "homeassistant/sensor/deye_6k/deye_6k_pv1_power/config"
     payload = json.loads(configs[topic])
     assert payload["name"] == "PV1 Power"
     assert payload["unit_of_measurement"] == "W"
     assert payload["state_topic"] == "deye/state"
     assert payload["availability_topic"] == "deye/availability"
-    assert payload["value_template"] == "{{ value_json.values['PV1 Power'] }}"
+    assert payload["value_template"] == "{{ value_json['values']['PV1 Power'] }}"
     assert payload["device"]["serial_number"] == SERIAL
 
 
 def test_discovery_unique_ids_are_unique() -> None:
     ids = [
         json.loads(payload)["unique_id"]
-        for payload in discovery_configs(SERIAL, _config()).values()
+        for payload in discovery_configs(VALUES, SERIAL, _config()).values()
     ]
     assert len(ids) == len(set(ids))
 
@@ -136,7 +139,7 @@ def test_handle_publishes_state_then_discovery_once() -> None:
     publisher = MqttPublisher(_config(), client=client)  # type: ignore[arg-type]
     publisher.handle(_sample())
     discovery_after_first = sum(1 for topic, _, _ in client.published if topic.endswith("/config"))
-    assert discovery_after_first == len(REGISTERS) - 1
+    assert discovery_after_first == 2
     publisher.handle(_sample())
     discovery_after_second = sum(1 for topic, _, _ in client.published if topic.endswith("/config"))
     assert discovery_after_second == discovery_after_first

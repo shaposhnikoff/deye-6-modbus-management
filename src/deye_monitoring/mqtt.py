@@ -74,7 +74,12 @@ def state_payload(
     return json.dumps(payload, ensure_ascii=False)
 
 
-def discovery_configs(serial: str | None, config: MqttConfig) -> dict[str, str]:
+UNIT_BY_NAME = {register.name: register.unit for register in REGISTERS}
+
+
+def discovery_configs(
+    values: dict[str, float], serial: str | None, config: MqttConfig
+) -> dict[str, str]:
     """Build ``topic -> payload`` pairs for Home Assistant MQTT discovery."""
     device = {
         "identifiers": [config.node],
@@ -86,20 +91,22 @@ def discovery_configs(serial: str | None, config: MqttConfig) -> dict[str, str]:
         device["serial_number"] = serial
 
     configs: dict[str, str] = {}
-    for register in REGISTERS:
-        if register.name == "Running Status":
+    for name in sorted(values):
+        if name == "Running Status":
             continue
-        unique = _unique_id(config.node, register.name)
+        unit = UNIT_BY_NAME.get(name, "")
+        unique = _unique_id(config.node, name)
         payload = {
-            "name": register.name,
+            "name": name,
             "unique_id": unique,
             "state_topic": config.state_topic,
             "availability_topic": config.availability_topic,
-            "value_template": "{{ value_json.values['" + register.name + "'] }}",
+            # Subscript, not attribute access: value_json.values() is a dict method.
+            "value_template": "{{ value_json['values']['" + name + "'] }}",
             "device": device,
         }
-        if register.unit:
-            payload["unit_of_measurement"] = register.unit
+        if unit:
+            payload["unit_of_measurement"] = unit
             payload["state_class"] = "measurement"
         configs[f"{config.discovery_topic}/{unique}/config"] = json.dumps(
             payload, ensure_ascii=False
@@ -143,9 +150,9 @@ class MqttPublisher:
         except Exception as error:  # noqa: BLE001 - shutdown must not raise
             LOGGER.debug("mqtt shutdown: %s", error)
 
-    def publish_discovery(self, serial: str | None) -> None:
-        """Publish retained discovery configs for every register."""
-        configs = discovery_configs(serial, self.config)
+    def publish_discovery(self, values: dict[str, float], serial: str | None) -> None:
+        """Publish retained discovery configs for the values we actually publish."""
+        configs = discovery_configs(values, serial, self.config)
         for topic, payload in configs.items():
             self._client.publish(topic, payload, qos=1, retain=True)
         LOGGER.info("published %d discovery configs", len(configs))
@@ -194,7 +201,7 @@ class MqttPublisher:
             error=sample.error,
         )
         if sample.error is None and not self._discovered:
-            self.publish_discovery(sample.serial)
+            self.publish_discovery(values, sample.serial)
             self._discovered = True
 
     def publish_from_cache(self, snapshot: CacheSnapshot) -> None:
@@ -211,5 +218,5 @@ class MqttPublisher:
             tou=snapshot.tou,
         )
         if snapshot.online and not self._discovered:
-            self.publish_discovery(snapshot.serial)
+            self.publish_discovery(snapshot.values, snapshot.serial)
             self._discovered = True

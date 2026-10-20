@@ -195,6 +195,16 @@ Topics:
 - `homeassistant/sensor/deye_6k/<unique_id>/config` — retained discovery config per sensor.
 
 Home Assistant picks the entities up automatically as a `Deye SUN-6K` device; no YAML needed.
+Discovery is generated from the values actually published, so sensors for hardware this model does
+not have (L2/L3 phases, PV3/PV4) are never announced.
+
+Two gotchas worth remembering:
+
+- the state template uses subscripts — `{{ value_json['values']['PV1 Power'] }}` — because
+  `value_json.values` resolves to the dict method `values()` and silently breaks every sensor;
+- after renaming or dropping sensors, remove the stale retained configs with
+  `uv run python tools/cleanup_discovery.py`, otherwise Home Assistant keeps "unavailable"
+  entities forever.
 
 ## Writing (Time-of-Use)
 
