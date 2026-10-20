@@ -142,6 +142,7 @@ def parse_entries() -> list[dict[str, object]]:
     entries.sort(key=lambda entry: (str(entry["group"]), int(entry["address"])))
     return entries
 
+
 def render(entries: list[dict[str, object]]) -> str:
     lines = [HEADER]
     for entry in entries:

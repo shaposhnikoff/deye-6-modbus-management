@@ -1,0 +1,9 @@
+ - job_name: deye
+   scrape_interval: 30s
+   scrape_timeout: 10s
+   static_configs:
+     - targets: ["192.168.10.39:9101"]
+       labels:
+         inverter: sun6k
+         model: SUN-6K-SG05LP1
+         site: home

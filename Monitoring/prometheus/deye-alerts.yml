@@ -1,0 +1,59 @@
+# Alerting rules for the Deye inverter exporter.
+# Validate with: promtool check rules deye-alerts.yml
+
+groups:
+  - name: deye
+    rules:
+      - alert: DeyeScrapeFailing
+        expr: deye_scrape_success == 0
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Inverter Modbus reads are failing"
+          description: "No successful Modbus poll for 3 minutes on {{ $labels.instance }}."
+
+      - alert: DeyeDataStale
+        expr: time() - deye_last_successful_scrape_timestamp_seconds > 120
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Inverter data is stale"
+          description: "Last successful poll was {{ $value | humanizeDuration }} ago."
+
+      - alert: DeyeOverTemperature
+        expr: max(deye_dc_temperature_celsius, deye_ac_temperature_celsius) > 65
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Inverter is running hot"
+          description: "DC {{ with printf \"deye_dc_temperature_celsius\" | query }}{{ . | first | value }}{{ end }} C, AC {{ with printf \"deye_ac_temperature_celsius\" | query }}{{ . | first | value }}{{ end }} C."
+
+      - alert: DeyeFault
+        expr: deye_running_status{status="fault"} == 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Inverter reports a fault"
+          description: "Running status is fault on serial {{ $labels.serial }}."
+
+      - alert: DeyeAlarm
+        expr: deye_running_status{status="alarm"} == 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Inverter reports an alarm"
+          description: "Running status is alarm on serial {{ $labels.serial }}."
+
+      - alert: DeyeExporterDown
+        expr: up{job="deye"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Exporter is unreachable"
+          description: "Prometheus cannot scrape {{ $labels.instance }}."

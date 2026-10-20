@@ -579,16 +579,16 @@ def test_disabled_without_token(fake_transport):
     notifier.raise_alert("stale", "no data")
     assert fake_transport.requests == []
 
+
 def test_message_contains_alert_and_serial(fake_transport):
     notifier = Notifier(token="t", chat_id="1", transport=fake_transport)
     notifier.raise_alert("over_temperature", "DC 68.1 C")
     body = fake_transport.requests[0]["data"]["text"]
     assert "over_temperature" in body and "2601255637" in body
 
-def test_cooldown_suppresses_repeats(fake_transport, clock):
-    ...
-def test_recovery_message_is_sent_once(fake_transport):
-    ...
+
+def test_cooldown_suppresses_repeats(fake_transport, clock): ...
+def test_recovery_message_is_sent_once(fake_transport): ...
 ```
 
 **Step 2: Implement** — `Notifier` builds `https://api.telegram.org/bot<token>/sendMessage` requests with `urllib.request`, `parse_mode=HTML`, escapes user text, never raises into the poll loop, and logs failures.
