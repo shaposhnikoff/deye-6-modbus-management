@@ -78,6 +78,9 @@ systemctl status deye-monitoring
 journalctl -u deye-monitoring -f
 ```
 
+If the unit failed several times while you were setting it up, systemd refuses further starts;
+clear the counter with `sudo systemctl reset-failed deye-monitoring`.
+
 Why the unit looks the way it does:
 
 - `ExecStart` points at the venv entry point (`.venv/bin/dmon`), not at `uv run`. The venv script
@@ -88,6 +91,32 @@ Why the unit looks the way it does:
 
 Optional settings live in `/etc/deye-monitoring.env` (`DEYE_LISTEN`, `DEYE_INTERVAL`,
 `DEYE_PORT`, Telegram variables); every one of them has a built-in default.
+
+## Telegram alerts
+
+Built in, no Prometheus or Alertmanager required. Put the credentials in `/etc/deye-monitoring.env`
+and restart the service:
+
+```bash
+sudo tee /etc/deye-monitoring.env >/dev/null <<'ENV'
+DEYE_TELEGRAM_TOKEN=123456:AA-your-token
+DEYE_TELEGRAM_CHAT_ID=123456789
+ENV
+sudo systemctl restart deye-monitoring
+journalctl -u deye-monitoring -n 5 | grep telegram
+```
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `DEYE_TELEGRAM_TOKEN` | — | bot token from `@BotFather`; without it notifications stay off |
+| `DEYE_TELEGRAM_CHAT_ID` | — | chat or channel id (see `getUpdates` after writing to the bot) |
+| `DEYE_TEMP_WARNING_C` | `65` | DC/AC temperature that raises an alert |
+| `DEYE_STALE_SECONDS` | `120` | data age that counts as stale |
+| `DEYE_NOTIFY_COOLDOWN` | `1800` | minimum seconds between repeats of the same alert |
+
+Alerts: Modbus reads failing, stale data, over-temperature, running status `fault`, status `alarm`.
+A `RECOVERED` message is sent when an alert clears, and a cooldown keeps a flapping line from
+spamming the chat. Without a token the service logs `telegram disabled` and keeps monitoring.
 
 ## Register map
 

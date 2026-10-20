@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 
 from deye_monitoring.collector import Collector, modbus_reader
 from deye_monitoring.modbus import ModbusClient, ModbusConfig, ModbusError
+from deye_monitoring.notify import Notifier, NotifyConfig
 from deye_monitoring.snapshot import (
     BLOCKS,
     Reading,
@@ -71,6 +72,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=float(os.environ.get("DEYE_INTERVAL", "10")),
         help="seconds between Modbus polls (default: %(default)s)",
+    )
+    serve.add_argument(
+        "--notify",
+        action="store_true",
+        help="send Telegram alerts (needs DEYE_TELEGRAM_TOKEN and DEYE_TELEGRAM_CHAT_ID)",
     )
     return parser
 
@@ -164,9 +170,35 @@ def cmd_watch(args: argparse.Namespace) -> int:
         time.sleep(max(args.interval - elapsed, 0.0))
 
 
+def _notify_config() -> NotifyConfig:
+    return NotifyConfig(
+        token=os.environ.get("DEYE_TELEGRAM_TOKEN"),
+        chat_id=os.environ.get("DEYE_TELEGRAM_CHAT_ID"),
+        temp_warning_c=float(os.environ.get("DEYE_TEMP_WARNING_C", "65")),
+        stale_seconds=float(os.environ.get("DEYE_STALE_SECONDS", "120")),
+        cooldown=float(os.environ.get("DEYE_NOTIFY_COOLDOWN", "1800")),
+    )
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     """Run the collector and serve Prometheus metrics until terminated."""
-    collector = Collector(modbus_reader(_config(args)), interval=args.interval)
+    notifier: Notifier | None = None
+    if args.notify:
+        config = _notify_config()
+        if config.enabled:
+            notifier = Notifier(config)
+        else:
+            print(
+                "telegram disabled: set DEYE_TELEGRAM_TOKEN and DEYE_TELEGRAM_CHAT_ID",
+                file=sys.stderr,
+                flush=True,
+            )
+
+    collector = Collector(
+        modbus_reader(_config(args)),
+        interval=args.interval,
+        on_sample=notifier.handle if notifier else None,
+    )
     server = create_server(args.listen, collector)
     stop = threading.Event()
 
@@ -183,7 +215,8 @@ def cmd_serve(args: argparse.Namespace) -> int:
     thread.start()
     print(
         f"serving metrics on http://{host}:{port}/metrics "
-        f"(poll interval {args.interval:g}s, device {args.port})",
+        f"(poll interval {args.interval:g}s, device {args.port}, "
+        f"telegram {'on' if notifier else 'off'})",
         flush=True,
     )
     try:

@@ -36,9 +36,15 @@ def modbus_reader(config: ModbusConfig) -> Reader:
 class Collector:
     """Poll the inverter in a background thread and serve the last snapshot."""
 
-    def __init__(self, reader: Reader, interval: float = 10.0) -> None:
+    def __init__(
+        self,
+        reader: Reader,
+        interval: float = 10.0,
+        on_sample: Callable[[Sample], None] | None = None,
+    ) -> None:
         self._reader = reader
         self.interval = interval
+        self._on_sample = on_sample
         self._sample = Sample()
         self._lock = threading.Lock()
         self._stop = threading.Event()
@@ -50,7 +56,7 @@ class Collector:
             return self._sample
 
     def poll_once(self) -> Sample:
-        """Read the inverter once and cache the result."""
+        """Read the inverter once, cache the result and notify the listener."""
         started = time.monotonic()
         try:
             readings, serial = self._reader()
@@ -65,18 +71,25 @@ class Collector:
                     last_success=previous.last_success,
                     error=str(error),
                 )
-                return self._sample
+                sample = self._sample
+        else:
+            duration = time.monotonic() - started
+            with self._lock:
+                self._sample = Sample(
+                    readings=tuple(readings),
+                    serial=serial,
+                    duration=duration,
+                    last_success=time.time(),
+                    error=None,
+                )
+                sample = self._sample
 
-        duration = time.monotonic() - started
-        with self._lock:
-            self._sample = Sample(
-                readings=tuple(readings),
-                serial=serial,
-                duration=duration,
-                last_success=time.time(),
-                error=None,
-            )
-            return self._sample
+        if self._on_sample is not None:
+            try:
+                self._on_sample(sample)
+            except Exception:  # noqa: BLE001 - a listener bug must not stop polling
+                LOGGER.exception("sample listener failed")
+        return sample
 
     def start(self) -> None:
         """Start the polling thread (idempotent)."""

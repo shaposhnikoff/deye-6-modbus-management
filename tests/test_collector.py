@@ -77,3 +77,20 @@ def test_start_is_idempotent() -> None:
     time.sleep(0.05)
     collector.stop()
     assert reader.calls >= 1
+
+
+def test_on_sample_receives_every_poll() -> None:
+    samples = []
+    collector = Collector(FakeReader(), on_sample=samples.append)
+    collector.poll_once()
+    collector.poll_once()
+    assert len(samples) == 2
+    assert samples[0].serial == "2601255637"
+
+
+def test_listener_failure_does_not_break_polling() -> None:
+    def broken_listener(sample: object) -> None:
+        raise RuntimeError("listener bug")
+
+    collector = Collector(FakeReader(), on_sample=broken_listener)
+    assert collector.poll_once().error is None
