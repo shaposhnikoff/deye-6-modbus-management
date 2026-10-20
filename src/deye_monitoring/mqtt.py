@@ -1,9 +1,12 @@
 """MQTT bridge: publish inverter state and Home Assistant discovery.
 
-MQTT runs inside the collector process (``dmon serve --mqtt``) or as a standalone
-``dmon mqtt``. Both own the serial port exclusively, so run only one of them.
+Two modes share the same publisher:
 
-Home Assistant gets one retained discovery config per sensor, so no YAML is needed there.
+* ``dmon serve --mqtt`` publishes from the live sample (same process as the serial owner);
+* ``dmon publish --cache /run/deye/state.json`` publishes from the local JSON cache and never
+  touches the serial port, so it can run as its own service.
+
+Home Assistant gets one retained discovery config per register, so no YAML is needed there.
 """
 
 from __future__ import annotations
@@ -16,13 +19,12 @@ from dataclasses import dataclass
 
 import paho.mqtt.client as mqtt
 
+from deye_monitoring.cache import CacheSnapshot
 from deye_monitoring.exporter import Sample
 from deye_monitoring.metrics import slugify
+from deye_monitoring.registers import REGISTERS
 
 LOGGER = logging.getLogger(__name__)
-
-# The one-hot status register is not a usable numeric sensor in Home Assistant.
-DISCOVERY_SKIP_NAMES = {"Running Status"}
 
 
 @dataclass(frozen=True)
@@ -49,21 +51,30 @@ def _unique_id(node: str, name: str) -> str:
     return f"{node}_{slugify(name)}"
 
 
-def state_payload(sample: Sample) -> str:
+def state_payload(
+    values: dict[str, float],
+    serial: str | None,
+    online: bool,
+    *,
+    error: str | None = None,
+    timestamp: str | None = None,
+    tou: dict | None = None,
+) -> str:
     """JSON payload describing one poll."""
-    values = {reading.name: reading.value for reading in sample.readings}
-    payload = {
-        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
-        "serial": sample.serial,
-        "online": sample.error is None,
+    payload: dict[str, object] = {
+        "timestamp": timestamp or time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "serial": serial,
+        "online": online,
         "values": values,
     }
-    if sample.error:
-        payload["error"] = sample.error
+    if error:
+        payload["error"] = error
+    if tou:
+        payload["tou"] = tou
     return json.dumps(payload, ensure_ascii=False)
 
 
-def discovery_configs(sample: Sample, config: MqttConfig) -> dict[str, str]:
+def discovery_configs(serial: str | None, config: MqttConfig) -> dict[str, str]:
     """Build ``topic -> payload`` pairs for Home Assistant MQTT discovery."""
     device = {
         "identifiers": [config.node],
@@ -71,33 +82,34 @@ def discovery_configs(sample: Sample, config: MqttConfig) -> dict[str, str]:
         "manufacturer": "Deye",
         "model": "SUN-6K-SG05LP1",
     }
-    if sample.serial:
-        device["serial_number"] = sample.serial
+    if serial:
+        device["serial_number"] = serial
 
     configs: dict[str, str] = {}
-    seen: set[str] = set()
-    for reading in sample.readings:
-        if reading.name in DISCOVERY_SKIP_NAMES:
+    for register in REGISTERS:
+        if register.name == "Running Status":
             continue
-        unique = _unique_id(config.node, reading.name)
-        if unique in seen:
-            continue
-        seen.add(unique)
+        unique = _unique_id(config.node, register.name)
         payload = {
-            "name": reading.name,
+            "name": register.name,
             "unique_id": unique,
             "state_topic": config.state_topic,
             "availability_topic": config.availability_topic,
-            "value_template": "{{ value_json.values['" + reading.name + "'] }}",
+            "value_template": "{{ value_json.values['" + register.name + "'] }}",
             "device": device,
         }
-        if reading.unit:
-            payload["unit_of_measurement"] = reading.unit
+        if register.unit:
+            payload["unit_of_measurement"] = register.unit
             payload["state_class"] = "measurement"
         configs[f"{config.discovery_topic}/{unique}/config"] = json.dumps(
             payload, ensure_ascii=False
         )
     return configs
+
+
+def node_id(value: str) -> str:
+    """Sanitise a node id for topic names."""
+    return re.sub(r"[^a-z0-9_]+", "_", value.lower()).strip("_")
 
 
 class MqttPublisher:
@@ -109,6 +121,8 @@ class MqttPublisher:
             callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
             client_id=f"{config.node}-{int(time.time())}",
         )
+        self._discovered = False
+        self._online: bool | None = None
         if config.username:
             self._client.username_pw_set(config.username, config.password)
         self._client.will_set(config.availability_topic, "offline", retain=True)
@@ -117,7 +131,7 @@ class MqttPublisher:
         """Connect, start the loop and mark the node online."""
         self._client.connect(self.config.host, self.config.port, keepalive=60)
         self._client.loop_start()
-        self._client.publish(self.config.availability_topic, "online", retain=True)
+        self._set_available(True)
         LOGGER.info("mqtt connected to %s:%s", self.config.host, self.config.port)
 
     def close(self) -> None:
@@ -129,27 +143,73 @@ class MqttPublisher:
         except Exception as error:  # noqa: BLE001 - shutdown must not raise
             LOGGER.debug("mqtt shutdown: %s", error)
 
-    def publish_discovery(self, sample: Sample) -> None:
-        """Publish retained discovery configs for every sensor."""
-        configs = discovery_configs(sample, self.config)
+    def publish_discovery(self, serial: str | None) -> None:
+        """Publish retained discovery configs for every register."""
+        configs = discovery_configs(serial, self.config)
         for topic, payload in configs.items():
             self._client.publish(topic, payload, qos=1, retain=True)
         LOGGER.info("published %d discovery configs", len(configs))
 
-    def publish_state(self, sample: Sample) -> None:
+    def publish_state(
+        self,
+        values: dict[str, float],
+        serial: str | None,
+        online: bool,
+        *,
+        error: str | None = None,
+        timestamp: str | None = None,
+        tou: dict | None = None,
+    ) -> None:
         """Publish one state snapshot."""
         self._client.publish(
-            self.config.state_topic, state_payload(sample), qos=1, retain=self.config.retain
+            self.config.state_topic,
+            state_payload(values, serial, online, error=error, timestamp=timestamp, tou=tou),
+            qos=1,
+            retain=self.config.retain,
         )
 
+    def _set_available(self, online: bool, reason: str = "") -> None:
+        """Publish availability only when it changes, so the topic never flaps."""
+        if online == self._online:
+            return
+        self._online = online
+        self._client.publish(
+            self.config.availability_topic, "online" if online else "offline", retain=True
+        )
+        if not online:
+            LOGGER.warning("publishing offline: %s", reason)
+
+    def publish_offline(self, reason: str) -> None:
+        """Flag the device as unavailable without publishing stale values."""
+        self._set_available(False, reason)
+
     def handle(self, sample: Sample) -> None:
-        """Collector callback: publish state, and discovery once we know the serial."""
-        self.publish_state(sample)
-        if sample.error is None and not getattr(self, "_discovered", False):
-            self.publish_discovery(sample)
+        """Collector callback used by ``serve --mqtt``."""
+        values = {reading.name: reading.value for reading in sample.readings}
+        self._set_available(sample.error is None, sample.error or "")
+        self.publish_state(
+            values,
+            sample.serial,
+            sample.error is None,
+            error=sample.error,
+        )
+        if sample.error is None and not self._discovered:
+            self.publish_discovery(sample.serial)
             self._discovered = True
 
-
-def node_id(value: str) -> str:
-    """Sanitise a node id for topic names."""
-    return re.sub(r"[^a-z0-9_]+", "_", value.lower()).strip("_")
+    def publish_from_cache(self, snapshot: CacheSnapshot) -> None:
+        """Publish a snapshot read from the local cache file."""
+        if not snapshot.is_fresh():
+            self.publish_offline(f"cache is {snapshot.age():.0f}s old")
+            return
+        self._set_available(True)
+        self.publish_state(
+            snapshot.values,
+            snapshot.serial,
+            snapshot.online,
+            error=snapshot.error,
+            tou=snapshot.tou,
+        )
+        if snapshot.online and not self._discovered:
+            self.publish_discovery(snapshot.serial)
+            self._discovered = True

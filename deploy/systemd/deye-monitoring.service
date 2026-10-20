@@ -1,5 +1,5 @@
 [Unit]
-Description=Deye inverter Modbus monitoring (Prometheus exporter)
+Description=Deye inverter collector and Prometheus exporter
 Documentation=https://github.com/shaposhnikoff/deye-6-modbus-management
 After=network-online.target dev-modbus.device
 Wants=network-online.target
@@ -12,7 +12,9 @@ User=max
 Group=max
 WorkingDirectory=/home/max
 EnvironmentFile=-/etc/deye-monitoring.env
-ExecStart=/home/max/DEYEMonitoring/.venv/bin/dmon serve --listen 0.0.0.0:9101 --interval 10 --notify --mqtt
+RuntimeDirectory=deye
+RuntimeDirectoryMode=0750
+ExecStart=/home/max/DEYEMonitoring/.venv/bin/dmon serve
 Restart=always
 RestartSec=15
 MemoryMax=256M

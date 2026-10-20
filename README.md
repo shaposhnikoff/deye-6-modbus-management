@@ -65,13 +65,52 @@ Example JSON line:
  "values": {"PV1 Power": 654, "PV1 Voltage": 130.9, "Battery": 89, "Grid Power": 18}}
 ```
 
+## Configuration
+
+One file configures both services: `/etc/deye-monitoring.env` (systemd `EnvironmentFile`). Copy
+`deploy/systemd/deye-monitoring.env.example`, `chmod 600`, then restart the services. Every key is
+optional and falls back to the default shown.
+
+| Variable | Default | Used by |
+|---|---|---|
+| `DEYE_PORT` | `/dev/modbus` | both |
+| `DEYE_BAUD` / `DEYE_SLAVE` | `9600` / `1` | both |
+| `DEYE_LISTEN` | `0.0.0.0:9101` | collector |
+| `DEYE_INTERVAL` | `10` | collector |
+| `DEYE_CACHE_PATH` | `/run/deye/state.json` | collector writes, publisher reads |
+| `DEYE_NOTIFY` | off | collector (`1` enables Telegram) |
+| `DEYE_LOG_LEVEL` | `INFO` | both |
+| `DEYE_TELEGRAM_TOKEN` / `DEYE_TELEGRAM_CHAT_ID` | — | collector |
+| `DEYE_TEMP_WARNING_C` / `DEYE_STALE_SECONDS` / `DEYE_NOTIFY_COOLDOWN` | `65` / `120` / `1800` | collector |
+| `DEYE_MQTT_HOST` / `DEYE_MQTT_PORT` | `192.168.10.68` / `1883` | publisher |
+| `DEYE_MQTT_USER` / `DEYE_MQTT_PASSWORD` | — | publisher |
+| `DEYE_MQTT_PREFIX` / `DEYE_MQTT_NODE` | `homeassistant` / `deye_6k` | publisher |
+
+Because the cache path lives here, both units can start without any flags:
+
+```ini
+# deye-monitoring.service
+ExecStart=/home/max/DEYEMonitoring/.venv/bin/dmon serve
+
+# deye-mqtt.service
+ExecStart=/home/max/DEYEMonitoring/.venv/bin/dmon publish
+```
+
 ## Run as a service
 
-Unit file: [`deploy/systemd/deye-monitoring.service`](deploy/systemd/deye-monitoring.service),
-environment template: [`deploy/systemd/deye-monitoring.env.example`](deploy/systemd/deye-monitoring.env.example).
+Two units, one per role:
+
+| Unit | Role | Owns the serial port |
+|---|---|---|
+| `deye-monitoring.service` | polls the inverter, writes the cache, serves `/metrics` | **yes** |
+| `deye-mqtt.service` | reads the cache, publishes to MQTT | no |
+
+Unit files live in [`deploy/systemd/`](deploy/systemd/), the environment template in
+[`deploy/systemd/deye-monitoring.env.example`](deploy/systemd/deye-monitoring.env.example).
 
 ```bash
 sudo install -m 0644 deploy/systemd/deye-monitoring.service /etc/systemd/system/
+sudo install -m 0644 deploy/systemd/deye-mqtt.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now deye-monitoring
 systemctl status deye-monitoring
@@ -120,8 +159,21 @@ spamming the chat. Without a token the service logs `telegram disabled` and keep
 
 ## MQTT / Home Assistant
 
-The exporter can also publish to MQTT, either together with Prometheus (`serve --mqtt`) or alone
-(`dmon mqtt`). Both own the serial port, so run only one of them.
+The collector owns the serial port and writes a JSON snapshot to `/run/deye/state.json` (tmpfs,
+atomic replace) after every poll. Anything else reads that file or the HTTP endpoint, so the
+Modbus bus never sees two masters.
+
+Two ways to publish:
+
+```bash
+dmon serve --mqtt          # one process: metrics + MQTT
+dmon publish               # separate service: reads the cache, no serial access
+```
+
+The split (`deye-mqtt.service` on top of `deye-monitoring.service`) is what the repo ships: a
+crash or restart of the publisher cannot disturb the collector, and vice versa. When the cache is
+missing or older than `3 x interval`, the publisher marks the device `offline` instead of
+republishing stale numbers.
 
 ```bash
 uv run dmon mqtt --broker 192.168.10.68 --interval 10        # MQTT only

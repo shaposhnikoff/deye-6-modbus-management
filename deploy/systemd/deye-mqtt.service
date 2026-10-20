@@ -1,0 +1,24 @@
+[Unit]
+Description=Deye inverter MQTT bridge (reads the local cache)
+Documentation=https://github.com/shaposhnikoff/deye-6-modbus-management
+After=network-online.target deye-monitoring.service
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=max
+Group=max
+WorkingDirectory=/home/max
+EnvironmentFile=-/etc/deye-monitoring.env
+ExecStart=/home/max/DEYEMonitoring/.venv/bin/dmon publish
+Restart=always
+RestartSec=15
+MemoryMax=128M
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

@@ -74,6 +74,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="seconds between Modbus polls (default: %(default)s)",
     )
     serve.add_argument(
+        "--cache-path",
+        default=os.environ.get("DEYE_CACHE_PATH", "/run/deye/state.json"),
+        help="local JSON cache written after every poll (default: %(default)s)",
+    )
+    serve.add_argument(
         "--mqtt",
         action="store_true",
         help="publish state and Home Assistant discovery over MQTT",
@@ -93,6 +98,26 @@ def build_parser() -> argparse.ArgumentParser:
     )
     mqtt_cmd.add_argument("--prefix", default=os.environ.get("DEYE_MQTT_PREFIX", "homeassistant"))
     mqtt_cmd.add_argument("--node", default=os.environ.get("DEYE_MQTT_NODE", "deye_6k"))
+
+    publish_cmd = subparsers.add_parser(
+        "publish",
+        parents=[common],
+        help="publish MQTT state from the local cache (no serial access)",
+    )
+    publish_cmd.add_argument(
+        "--cache",
+        default=os.environ.get("DEYE_CACHE_PATH", "/run/deye/state.json"),
+        help="cache file written by serve (default: %(default)s)",
+    )
+    publish_cmd.add_argument("--interval", type=float, default=10.0)
+    publish_cmd.add_argument("--broker", default=os.environ.get("DEYE_MQTT_HOST", "192.168.10.68"))
+    publish_cmd.add_argument(
+        "--broker-port", type=int, default=int(os.environ.get("DEYE_MQTT_PORT", "1883"))
+    )
+    publish_cmd.add_argument(
+        "--prefix", default=os.environ.get("DEYE_MQTT_PREFIX", "homeassistant")
+    )
+    publish_cmd.add_argument("--node", default=os.environ.get("DEYE_MQTT_NODE", "deye_6k"))
     return parser
 
 
@@ -196,11 +221,19 @@ def _mqtt_publisher(args: argparse.Namespace):
         port=getattr(args, "broker_port", None) or int(os.environ.get("DEYE_MQTT_PORT", "1883")),
         username=os.environ.get("DEYE_MQTT_USER"),
         password=os.environ.get("DEYE_MQTT_PASSWORD"),
-        prefix=getattr(args, "prefix", None)
-        or os.environ.get("DEYE_MQTT_PREFIX", "homeassistant"),
+        prefix=getattr(args, "prefix", None) or os.environ.get("DEYE_MQTT_PREFIX", "homeassistant"),
         node=getattr(args, "node", None) or os.environ.get("DEYE_MQTT_NODE", "deye_6k"),
     )
     return MqttPublisher(config)
+
+
+def _cache_writer(path: str, interval: float):
+    from deye_monitoring.cache import write_snapshot
+
+    def handle(sample):
+        write_snapshot(path, sample, interval=interval)
+
+    return handle
 
 
 def _chain(*callbacks):
@@ -227,8 +260,14 @@ def _notify_config() -> NotifyConfig:
 
 def cmd_serve(args: argparse.Namespace) -> int:
     """Run the collector and serve Prometheus metrics until terminated."""
+    notify_enabled = args.notify or os.environ.get("DEYE_NOTIFY", "").lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
     notifier: Notifier | None = None
-    if args.notify:
+    if notify_enabled:
         config = _notify_config()
         if config.enabled:
             notifier = Notifier(config)
@@ -247,7 +286,9 @@ def cmd_serve(args: argparse.Namespace) -> int:
         modbus_reader(_config(args)),
         interval=args.interval,
         on_sample=_chain(
-            notifier.handle if notifier else None, publisher.handle if publisher else None
+            _cache_writer(args.cache_path, args.interval) if args.cache_path else None,
+            notifier.handle if notifier else None,
+            publisher.handle if publisher else None,
         ),
     )
     server = create_server(args.listen, collector)
@@ -310,8 +351,51 @@ def cmd_mqtt(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_publish(args: argparse.Namespace) -> int:
+    """Publish MQTT state from the local cache until interrupted."""
+    from deye_monitoring.cache import read_snapshot
+
+    publisher = _mqtt_publisher(args)
+    publisher.connect()
+    stop = threading.Event()
+
+    def handle_signal(signum: int, _frame: object) -> None:
+        print(f"received signal {signum}, stopping", file=sys.stderr, flush=True)
+        stop.set()
+
+    for signum in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(signum, handle_signal)
+
+    online = True
+    print(
+        f"publishing {args.cache} to {args.broker}:{args.broker_port} "
+        f"(interval {args.interval:g}s)",
+        flush=True,
+    )
+    try:
+        while not stop.is_set():
+            snapshot = read_snapshot(args.cache)
+            if snapshot is None:
+                if online:
+                    publisher.publish_offline(f"cache {args.cache} is missing")
+                    online = False
+            else:
+                publisher.publish_from_cache(snapshot)
+                online = snapshot.is_fresh()
+            stop.wait(args.interval)
+    finally:
+        publisher.close()
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """Entry point for the ``dmon`` command."""
+    import logging
+
+    logging.basicConfig(
+        level=os.environ.get("DEYE_LOG_LEVEL", "INFO").upper(),
+        format="%(levelname)s %(name)s: %(message)s",
+    )
     args = build_parser().parse_args(argv)
     handlers = {
         "read": cmd_read,
@@ -320,6 +404,7 @@ def main(argv: list[str] | None = None) -> int:
         "watch": cmd_watch,
         "serve": cmd_serve,
         "mqtt": cmd_mqtt,
+        "publish": cmd_publish,
     }
     try:
         return handlers[args.command](args)
