@@ -16,3 +16,12 @@ wheels/
 # macOS metadata
 .DS_Store
 ._*
+
+# Local capture/debug artifacts (never commit these)
+*.ansi
+*.ansi.txt
+state.json
+ha_*.png.tmp
+/tmp/
+.playwright/
+chrome-profile/
