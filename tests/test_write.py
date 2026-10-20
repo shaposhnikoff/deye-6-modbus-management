@@ -151,3 +151,11 @@ def test_audit_creates_missing_directory(tmp_path) -> None:
     change = plan_change(resolve("tou.1.soc"), 90, current=85)
     audit(str(log), change, serial_number="x", confirmed=True)
     assert log.exists()
+
+
+def test_plan_describes_bit_targets_correctly() -> None:
+    # gen_charge is bit 1: describing the encoded value must not shift it again.
+    change = plan_change(resolve("tou.3.gen_charge"), 1, current=5)
+    assert change.describe() == "tou.3.gen_charge: off -> on"
+    change = plan_change(resolve("tou.1.grid_charge"), 0, current=5)
+    assert change.describe() == "tou.1.grid_charge: on -> off"

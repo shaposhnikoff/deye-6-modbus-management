@@ -92,6 +92,17 @@ class WriteTarget:
             return float((raw >> self.bit) & 1)
         return raw / self.scale if self.scale != 1 else float(raw)
 
+    def describe_value(self, value: float) -> str:
+        """Format a human value (not a raw word), e.g. ``1 -> on`` for a bit target."""
+        if self.kind == TargetKind.TIME:
+            hours, minutes = divmod(int(value), 100)
+            return f"{hours:02d}:{minutes:02d}"
+        if self.bit is not None or self.kind == TargetKind.ENABLE:
+            return "on" if value else "off"
+        if self.unit:
+            return f"{value:g} {self.unit}"
+        return f"{value:g}"
+
     def describe(self, raw: int) -> str:
         """Format a raw value for humans, e.g. ``2100 -> 21:00``."""
         value = self.from_raw(raw)
@@ -250,7 +261,7 @@ class PlannedWrite:
     def describe(self) -> str:
         """Human readable summary of the change."""
         before = self.target.describe(self.current) if self.current is not None else "unknown"
-        return f"{self.target.key}: {before} -> {self.target.describe(self.raw)}"
+        return f"{self.target.key}: {before} -> {self.target.describe_value(self.value)}"
 
 
 def plan_change(target: WriteTarget, value: float, current: int | None) -> PlannedWrite:

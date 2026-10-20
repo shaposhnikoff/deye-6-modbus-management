@@ -143,7 +143,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
         ok = matches(target, expected, current)
         actual = target.describe(current) if current is not None else "?"
         status = "MATCH" if ok else "DRIFT"
-        expected_text = target.describe(expected)
+        expected_text = target.describe_value(value)
         print(f"  {status:<6}{key:<22} expected {expected_text:<10} actual {actual}")
         drift += 0 if ok else 1
     print(f"{len(changes) - drift}/{len(changes)} match")
