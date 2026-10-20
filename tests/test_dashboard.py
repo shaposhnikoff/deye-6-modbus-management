@@ -32,6 +32,7 @@ TOU_METRICS = {
     "deye_tou_enabled",
     "deye_tou_day",
     "deye_tou_slot_start_minutes",
+    "deye_tou_slot_start_hhmm",
     "deye_tou_slot_power_watts",
     "deye_tou_slot_voltage_volts",
     "deye_tou_slot_capacity_percent",
@@ -39,7 +40,10 @@ TOU_METRICS = {
     "deye_tou_mode",
 }
 KNOWN_METRICS = (
-    {metric_name(register) for register in REGISTERS} | HEALTH_METRICS | {RUNNING_STATUS_METRIC}
+    {metric_name(register) for register in REGISTERS}
+    | HEALTH_METRICS
+    | TOU_METRICS
+    | {RUNNING_STATUS_METRIC}
 )
 
 METRIC_TOKEN = re.compile(r"\bdeye_[a-z0-9_]+\b")

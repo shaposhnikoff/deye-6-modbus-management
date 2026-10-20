@@ -106,6 +106,7 @@ def test_readings_have_metric_names_and_labels(state: tou.TouState) -> None:
         "deye_tou_enabled",
         "deye_tou_day",
         "deye_tou_slot_start_minutes",
+        "deye_tou_slot_start_hhmm",
         "deye_tou_slot_power_watts",
         "deye_tou_slot_voltage_volts",
         "deye_tou_slot_capacity_percent",
@@ -115,6 +116,8 @@ def test_readings_have_metric_names_and_labels(state: tou.TouState) -> None:
     day = next(reading for reading in readings if reading.metric == "deye_tou_day")
     assert day.labels == {"day": "mon"}
     assert day.value == 1
+    hhmm = [r for r in readings if r.metric == "deye_tou_slot_start_hhmm"]
+    assert [r.value for r in hhmm] == [100, 500, 900, 1300, 1700, 2100]
     charge = [r for r in readings if r.metric == "deye_tou_charge"]
     assert len(charge) == 12  # six slots, grid and generator
     assert {r.labels["source"] for r in charge} == {"grid", "gen"}

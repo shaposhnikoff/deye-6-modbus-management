@@ -127,6 +127,93 @@ def table(title: str, grid: tuple[int, int, int, int], expr: str | None = None) 
     }
 
 
+def tou_table(grid: tuple[int, int, int, int]) -> dict:
+    """One row per Time-of-Use slot, one column per parameter."""
+    x, y, w, h = grid
+
+    def query(expr: str, legend: str, ref_id: str) -> dict:
+        return {
+            "datasource": DATASOURCE,
+            "expr": expr,
+            "format": "table",
+            "instant": True,
+            "legendFormat": legend,
+            "refId": ref_id,
+        }
+
+    return {
+        "type": "table",
+        "title": "Time of Use schedule",
+        "description": (
+            "One row per slot. Start is shown as HHMM, exactly as on the inverter screen "
+            "(900 = 09:00)."
+        ),
+        "datasource": DATASOURCE,
+        "gridPos": {"x": x, "y": y, "w": w, "h": h},
+        "fieldConfig": {
+            "defaults": {
+                "custom": {"align": "auto", "cellOptions": {"type": "auto"}},
+                "decimals": 0,
+            },
+            "overrides": [
+                {
+                    "matcher": {"id": "byName", "options": "Slot"},
+                    "properties": [{"id": "custom.width", "value": 70}],
+                },
+                {
+                    "matcher": {"id": "byRegexp", "options": "(Grid|Gen)"},
+                    "properties": [
+                        {
+                            "id": "mappings",
+                            "value": [
+                                {
+                                    "type": "value",
+                                    "options": {
+                                        "0": {"text": "off", "index": 0},
+                                        "1": {"text": "ON", "index": 1},
+                                    },
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        },
+        "options": {
+            "showHeader": True,
+            "sortBy": [{"displayName": "Slot", "desc": False}],
+        },
+        "targets": [
+            query("deye_tou_slot_start_hhmm", "Start", "A"),
+            query("deye_tou_slot_power_watts", "Power W", "B"),
+            query("deye_tou_slot_voltage_volts", "Voltage V", "C"),
+            query("deye_tou_slot_capacity_percent", "SoC %", "D"),
+            query('deye_tou_charge{source="grid"}', "Grid", "E"),
+            query('deye_tou_charge{source="gen"}', "Gen", "F"),
+        ],
+        "transformations": [
+            {"id": "labelsToFields", "options": {"mode": "columns", "keepLabels": ["slot"]}},
+            {"id": "merge", "options": {}},
+            {
+                "id": "organize",
+                "options": {
+                    "excludeByName": {"Time": True, "__name__": True},
+                    "indexByName": {
+                        "slot": 0,
+                        "Start": 1,
+                        "Power W": 2,
+                        "Voltage V": 3,
+                        "SoC %": 4,
+                        "Grid": 5,
+                        "Gen": 6,
+                    },
+                    "renameByName": {"slot": "Slot"},
+                },
+            },
+        ],
+    }
+
+
 def build() -> dict:
     """Assemble the dashboard document."""
     panels = [
@@ -259,11 +346,7 @@ def build() -> dict:
             "kwatth",
         ),
         table("All exported metrics", (0, 35, 24, 10)),
-        table(
-            "Time of Use schedule",
-            (0, 45, 24, 10),
-            expr='{__name__=~"deye_tou_.*", job="deye-modbus"}',
-        ),
+        tou_table((0, 45, 24, 10)),
     ]
 
     for index, panel in enumerate(panels, start=1):

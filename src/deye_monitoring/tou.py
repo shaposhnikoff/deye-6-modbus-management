@@ -229,6 +229,14 @@ def readings(state: TouState) -> list[Reading]:
                     slot=slot_label,
                 ),
                 reading(
+                    f"Time of Use slot {slot.slot} start HHMM",
+                    "deye_tou_slot_start_hhmm",
+                    int(slot.start_hhmm.replace(":", "")),
+                    "",
+                    address,
+                    slot=slot_label,
+                ),
+                reading(
                     f"Time of Use slot {slot.slot} power",
                     "deye_tou_slot_power_watts",
                     slot.power_w,
