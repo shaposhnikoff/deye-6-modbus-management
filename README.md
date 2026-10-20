@@ -29,6 +29,18 @@ between vendors and swapping is harmless.
 
 Serial settings: `9600 8N1`, slave address `1` (`Advanced Function → Paral. Set3 → Modbus SN`).
 
+The installation, as built: the Pi with the isolated adapter and the twisted pair that runs to the
+inverter, then the inverter's communication area with the Modbus RJ45, the BMS RS485/CAN ports and
+the battery terminals.
+
+| Hardware | Inverter |
+|---|---|
+| ![Pi and adapter](docs/assets/hardware-pi-adapter.jpeg) | ![Inverter ports](docs/assets/hardware-inverter-ports.jpeg) |
+| Raspberry Pi, Waveshare `USB TO RS232/485 (B)`, one twisted pair for A/B | `Modbus` RJ45 (pins 1–2), BMS `RS485/CAN` sockets, battery terminals |
+
+Note in the second photo that the BMS cable stays in its own socket: the Modbus tap must not share
+the BMS or meter port, otherwise the inverter stops talking to the battery.
+
 ## Install on the Pi
 
 ```bash
