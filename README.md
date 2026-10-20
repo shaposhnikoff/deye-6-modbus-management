@@ -242,6 +242,11 @@ Grafana dashboard fed by the exporter (`deye-6k`, 15 panels):
 
 ![Grafana dashboard](docs/assets/grafana-dashboard.png)
 
+The same data as a Home Assistant device, created by MQTT discovery — no YAML, serial number and
+activity included:
+
+![Home Assistant device](docs/assets/home-assistant.png)
+
 The terminal frames are generated from live cache data with
 `uv run --with pillow python tools/render_tui_png.py docs/assets/dmon-top.png docs/assets/dmon-top-tou.png`
 so they can be refreshed after a layout change.
