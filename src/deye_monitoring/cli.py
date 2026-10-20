@@ -5,10 +5,13 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import signal
 import sys
+import threading
 import time
 from datetime import UTC, datetime
 
+from deye_monitoring.collector import Collector, modbus_reader
 from deye_monitoring.modbus import ModbusClient, ModbusConfig, ModbusError
 from deye_monitoring.snapshot import (
     BLOCKS,
@@ -18,6 +21,7 @@ from deye_monitoring.snapshot import (
     read_registers,
     serial_number,
 )
+from deye_monitoring.web import create_server
 
 DEFAULT_PORT = os.environ.get("DEYE_PORT", "/dev/modbus")
 DEFAULT_BAUD = int(os.environ.get("DEYE_BAUD", "9600"))
@@ -53,6 +57,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     watch.add_argument("--interval", type=float, default=10.0, help="seconds between reads")
     watch.add_argument("--human", action="store_true", help="print tables instead of JSON lines")
+
+    serve = subparsers.add_parser(
+        "serve", parents=[common], help="serve Prometheus metrics on /metrics and /health"
+    )
+    serve.add_argument(
+        "--listen",
+        default=os.environ.get("DEYE_LISTEN", "0.0.0.0:9101"),
+        help="host:port to bind (default: %(default)s)",
+    )
+    serve.add_argument(
+        "--interval",
+        type=float,
+        default=float(os.environ.get("DEYE_INTERVAL", "10")),
+        help="seconds between Modbus polls (default: %(default)s)",
+    )
     return parser
 
 
@@ -145,6 +164,37 @@ def cmd_watch(args: argparse.Namespace) -> int:
         time.sleep(max(args.interval - elapsed, 0.0))
 
 
+def cmd_serve(args: argparse.Namespace) -> int:
+    """Run the collector and serve Prometheus metrics until terminated."""
+    collector = Collector(modbus_reader(_config(args)), interval=args.interval)
+    server = create_server(args.listen, collector)
+    stop = threading.Event()
+
+    def handle_signal(signum: int, _frame: object) -> None:
+        print(f"received signal {signum}, stopping", file=sys.stderr, flush=True)
+        stop.set()
+
+    for signum in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(signum, handle_signal)
+
+    collector.start()
+    host, port = server.server_address[0], server.server_address[1]
+    thread = threading.Thread(target=server.serve_forever, name="deye-http", daemon=True)
+    thread.start()
+    print(
+        f"serving metrics on http://{host}:{port}/metrics "
+        f"(poll interval {args.interval:g}s, device {args.port})",
+        flush=True,
+    )
+    try:
+        stop.wait()
+    finally:
+        server.shutdown()
+        server.server_close()
+        collector.stop()
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """Entry point for the ``dmon`` command."""
     args = build_parser().parse_args(argv)
@@ -153,6 +203,7 @@ def main(argv: list[str] | None = None) -> int:
         "json": cmd_json,
         "dump": cmd_dump,
         "watch": cmd_watch,
+        "serve": cmd_serve,
     }
     try:
         return handlers[args.command](args)

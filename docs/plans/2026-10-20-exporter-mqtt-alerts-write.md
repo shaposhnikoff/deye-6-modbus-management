@@ -8,6 +8,8 @@
 
 **Tech stack:** Python 3.13, uv, pyserial, stdlib `http.server` (exporter), `paho-mqtt` (optional extra), systemd, Prometheus + Alertmanager, Grafana (file provisioning), Mosquitto, Home Assistant MQTT discovery.
 
+**Deployment constraint:** all Prometheus, Grafana and Alertmanager configuration lives in the `Monitoring/` directory of this repository. The operator copies it wherever it belongs; the plan assumes no writable config directory and no specific host layout. The Mosquitto host is unknown, so every MQTT and Telegram setting arrives through environment variables and the exporter must work without them.
+
 **Already in place:** repository `shaposhnikoff/deye-6-modbus-management`, package `deye_monitoring` with FC3-only client, generated register map, CLI `dmon read|json|dump|watch`, 18 tests, udev rule giving `/dev/modbus`, working on the Pi at `/home/max/DEYE Monitoring`.
 
 ---
@@ -38,15 +40,18 @@
 from deye_monitoring.metrics import metric_name, unit_suffix
 from deye_monitoring.snapshot import Reading
 
+
 def test_unit_suffix_known_units():
     assert unit_suffix("W") == "watts"
     assert unit_suffix("kWh") == "kwh"
     assert unit_suffix("°C") == "celsius"
     assert unit_suffix("") == ""
 
+
 def test_metric_name_is_prometheus_safe():
     reading = Reading(name="PV1 Power", value=654, unit="W", address=0x00BA, group="pv")
     assert metric_name(reading) == "deye_pv1_power_watts"
+
 
 def test_metric_name_handles_parentheses_and_percent():
     reading = Reading(name="Battery (SOC)", value=89, unit="%", address=0x00B8, group="battery")
@@ -61,15 +66,24 @@ def test_metric_name_handles_parentheses_and_percent():
 
 ```python
 UNIT_SUFFIX = {
-    "W": "watts", "V": "volts", "A": "amperes", "kWh": "kwh",
-    "°C": "celsius", "%": "percent", "Hz": "hertz", "": "",
+    "W": "watts",
+    "V": "volts",
+    "A": "amperes",
+    "kWh": "kwh",
+    "°C": "celsius",
+    "%": "percent",
+    "Hz": "hertz",
+    "": "",
 }
+
 
 def slugify(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", text.lower()).strip("_")
 
+
 def unit_suffix(unit: str) -> str:
     return UNIT_SUFFIX.get(unit, slugify(unit))
+
 
 def metric_name(reading: Reading) -> str:
     suffix = unit_suffix(reading.unit)
@@ -95,9 +109,11 @@ def test_render_contains_help_type_and_labels(sample):
     assert "# TYPE deye_pv1_power_watts gauge" in text
     assert 'deye_pv1_power_watts{group="pv",serial="2601255637"} 654' in text
 
+
 def test_render_reports_scrape_health(sample):
     assert "deye_scrape_success 1" in text
     assert "deye_last_successful_scrape_timestamp_seconds" in text
+
 
 def test_render_marks_failed_scrape(sample_with_error):
     assert "deye_scrape_success 0" in text
@@ -115,7 +131,9 @@ def render(sample: Sample) -> str:
             if name not in seen:
                 lines += [f"# HELP {name} {reading.name}", f"# TYPE {name} gauge"]
                 seen.add(name)
-            lines.append(f'{name}{{group="{reading.group}",serial="{sample.serial}"}} {reading.value}')
+            lines.append(
+                f'{name}{{group="{reading.group}",serial="{sample.serial}"}} {reading.value}'
+            )
     lines.append("# TYPE deye_scrape_success gauge")
     lines.append(f"deye_scrape_success {0 if sample.error else 1}")
     lines.append("# TYPE deye_scrape_duration_seconds gauge")
@@ -141,8 +159,9 @@ def test_collector_caches_snapshot_between_scrapes(fake_reader):
     collector.poll_once()
     assert collector.latest().error is None
     assert fake_reader.calls == 1
-    collector.latest()          # serving a cached snapshot must not poll
+    collector.latest()  # serving a cached snapshot must not poll
     assert fake_reader.calls == 1
+
 
 def test_collector_keeps_last_good_values_on_error(fake_reader):
     collector = Collector(fake_reader, interval=0.01)
@@ -170,9 +189,11 @@ def test_metrics_endpoint_returns_exposition(server):
     body = urllib.request.urlopen(server.url("/metrics")).read().decode()
     assert "deye_scrape_success" in body
 
+
 def test_health_endpoint_returns_json(server):
     payload = json.loads(urllib.request.urlopen(server.url("/health")).read())
     assert payload["ok"] is True and "age_seconds" in payload
+
 
 def test_unknown_path_returns_404(server):
     with pytest.raises(urllib.error.HTTPError) as error:
@@ -244,6 +265,7 @@ def test_state_payload_matches_snapshot(fake_client, sample):
     topic, payload, retain = fake_client.published[0]
     assert topic == "deye/state" and retain is True
     assert json.loads(payload)["values"]["PV1 Power"] == 654
+
 
 def test_discovery_config_has_unit_and_state_topic(fake_client, sample):
     publish_discovery(fake_client, prefix="homeassistant", node="deye_6k", sample=sample)
@@ -324,12 +346,12 @@ WantedBy=multi-user.target
 ### Task 4.1: Prometheus configuration
 
 **Files:**
-- Create: `deploy/prometheus/prometheus.yml` (complete, runnable config)
-- Create: `deploy/prometheus/deye-scrape.yml` (snippet for an existing server)
+- Create: `Monitoring/prometheus/prometheus.yml` (complete, runnable config)
+- Create: `Monitoring/prometheus/deye-scrape.yml` (snippet for an existing server)
 - Create: `docs/PROMETHEUS.md` (where the config lives, how to reload, retention note)
 
 ```yaml
-# deploy/prometheus/prometheus.yml
+# Monitoring/prometheus/prometheus.yml
 global:
   scrape_interval: 30s
   evaluation_interval: 30s
@@ -352,8 +374,8 @@ scrape_configs:
 **Step 1: Validate before touching a running server**
 
 ```bash
-promtool check config deploy/prometheus/prometheus.yml
-promtool check rules deploy/prometheus/deye-alerts.yml
+promtool check config Monitoring/prometheus/prometheus.yml
+promtool check rules Monitoring/prometheus/deye-alerts.yml
 ```
 
 Expected: `SUCCESS: ... is valid`.
@@ -371,7 +393,7 @@ Expected: `up`.
 ### Task 4.2: Dashboard JSON
 
 **Files:**
-- Create: `deploy/grafana/dashboards/deye-6k.json`
+- Create: `Monitoring/grafana/dashboards/deye-6k.json`
 - Create: `tests/test_dashboard.py`
 
 Dashboard contract: `uid: deye-6k`, title `Deye 6K`, `schemaVersion` matching the target Grafana, refresh `30s`, default range `now-24h`, datasource variable `${DS_PROMETHEUS}`, and an `$instance` variable from `label_values(up{job="deye"}, instance)`.
@@ -398,16 +420,21 @@ Panels (all `expr` must reference metrics produced by the exporter):
 ```python
 def test_every_dashboard_expression_uses_a_known_metric():
     dashboard = json.loads(DASHBOARD.read_text())
-    expressions = extract_expressions(dashboard)          # walk panels + targets
-    known = {metric_name(r) for r in REGISTERS} | {"deye_scrape_success", "deye_last_successful_scrape_timestamp_seconds", "deye_scrape_duration_seconds", "deye_running_status"}
+    expressions = extract_expressions(dashboard)  # walk panels + targets
+    known = {metric_name(r) for r in REGISTERS} | {
+        "deye_scrape_success",
+        "deye_last_successful_scrape_timestamp_seconds",
+        "deye_scrape_duration_seconds",
+        "deye_running_status",
+    }
     referenced = {name for expr in expressions for name in re.findall(r"deye_[a-z0-9_]+", expr)}
     assert referenced <= known, f"unknown metrics in dashboard: {referenced - known}"
 
-def test_dashboard_has_uid_title_and_refresh():
-    ...
 
-def test_dashboard_panels_have_unique_ids_and_grid_positions():
-    ...
+def test_dashboard_has_uid_title_and_refresh(): ...
+
+
+def test_dashboard_panels_have_unique_ids_and_grid_positions(): ...
 ```
 
 **Step 2: Run it, expect FAIL** (dashboard file missing).
@@ -419,8 +446,8 @@ def test_dashboard_panels_have_unique_ids_and_grid_positions():
 ### Task 4.3: Provisioning and verification
 
 **Files:**
-- Create: `deploy/grafana/provisioning/datasources/prometheus.yml`
-- Create: `deploy/grafana/provisioning/dashboards/deye.yml`
+- Create: `Monitoring/grafana/provisioning/datasources/prometheus.yml`
+- Create: `Monitoring/grafana/provisioning/dashboards/deye.yml`
 - Create: `docs/GRAFANA.md`
 
 ```yaml
@@ -475,7 +502,7 @@ Expected: `Deye 6K` and the expected panel count.
 
 ### Task 5.1: Recording and alerting rules
 
-**Files:** Create `deploy/prometheus/deye-alerts.yml`
+**Files:** Create `Monitoring/prometheus/deye-alerts.yml`
 
 ```yaml
 groups:
@@ -517,11 +544,60 @@ Test: a snapshot with running status `2` renders `deye_running_status{status="no
 
 ### Task 5.3: Alertmanager Telegram receiver
 
-**Files:** Create `deploy/alertmanager/deye-route.yml` (route + `telegram_configs` snippet), `docs/ALERTS.md` (bot creation via `@BotFather`, chat id via `getUpdates`, how to test with `amtool alert add`).
+**Files:** Create `Monitoring/alertmanager/deye-route.yml` (route + `telegram_configs` snippet), `docs/ALERTS.md` (bot creation via `@BotFather`, chat id via `getUpdates`, how to test with `amtool alert add`).
 
 **Verify:** `amtool alert add DeyeTest severity=warning` → Telegram message arrives.
 
 **Commit** — `docs: add alertmanager telegram routing`
+
+---
+
+### Task 5.4: Built-in Telegram notifier
+
+**Files:**
+- Create: `src/deye_monitoring/notify.py`
+- Test: `tests/test_notify.py`
+- Modify: `src/deye_monitoring/cli.py` (`serve --notify`, disabled by default)
+
+Alertmanager is optional: this notifier makes a bare Pi enough to get messages. Configuration comes from the environment, nothing is stored in git:
+
+| Variable | Purpose |
+|---|---|
+| `DEYE_TELEGRAM_TOKEN` | bot token from `@BotFather`; when unset, notifications are disabled and the exporter logs it once |
+| `DEYE_TELEGRAM_CHAT_ID` | target chat or channel id |
+| `DEYE_TEMP_WARNING_C` | DC/AC temperature threshold for the warning (default 65) |
+| `DEYE_STALE_SECONDS` | data age that counts as stale (default 120) |
+| `DEYE_NOTIFY_COOLDOWN` | minimum seconds between repeats of the same alert (default 1800) |
+
+Rules: `scrape failing`, `data stale`, `over temperature`, `running status alarm/fault`, and a `recovered` message when a previously firing alert clears. State is kept in memory with a cooldown so a flapping line cannot spam the chat.
+
+**Step 1: Failing test** — a fake transport records requests:
+
+```python
+def test_disabled_without_token(fake_transport):
+    notifier = Notifier(token=None, chat_id=None, transport=fake_transport)
+    notifier.raise_alert("stale", "no data")
+    assert fake_transport.requests == []
+
+def test_message_contains_alert_and_serial(fake_transport):
+    notifier = Notifier(token="t", chat_id="1", transport=fake_transport)
+    notifier.raise_alert("over_temperature", "DC 68.1 C")
+    body = fake_transport.requests[0]["data"]["text"]
+    assert "over_temperature" in body and "2601255637" in body
+
+def test_cooldown_suppresses_repeats(fake_transport, clock):
+    ...
+def test_recovery_message_is_sent_once(fake_transport):
+    ...
+```
+
+**Step 2: Implement** — `Notifier` builds `https://api.telegram.org/bot<token>/sendMessage` requests with `urllib.request`, `parse_mode=HTML`, escapes user text, never raises into the poll loop, and logs failures.
+
+**Step 3: Wire into `serve`** — evaluate rules after each poll, send transitions only.
+
+**Step 4: Verify without a real token** — `uv run dmon serve --notify` prints `telegram disabled: DEYE_TELEGRAM_TOKEN is not set`; unit tests cover message building.
+
+**Step 5: Commit** — `feat: add optional telegram notifier`
 
 ---
 
@@ -534,7 +610,8 @@ Test: a snapshot with running status `2` renders `deye_running_status{status="no
 **Files:** Create `src/deye_monitoring/write.py`, `tests/test_write.py`
 
 - `build_write_frame(slave, address, value)` (FC6) and `build_write_multiple_frame` (FC16), CRC-checked, tested against known vectors.
-- `ALLOWED_REGISTERS: dict[str, RegisterSpec]` — start with `grid_charge`, `max_charge_current`, `max_discharge_current`, `tou_*`. Anything else raises `RegisterNotAllowed`.
+- `ALLOWED_REGISTERS: dict[str, RegisterSpec]` — start with the Time-of-Use schedule (`tou_*`: time slots, grid-charge flag, power per slot), then `max_charge_current` and `max_discharge_current`. Anything else raises `RegisterNotAllowed`.
+- TOU is the first and most important write target. Writes are **never executed against the live inverter during development**: tests use a fake transport, and the operator verifies on the device separately.
 - Echo verification: after writing, read back and compare; mismatch raises `WriteVerificationError`.
 
 ### Task 6.2: `dmon-write` CLI
@@ -575,7 +652,7 @@ Behaviour: `dmon-write set max_charge_current 50` prints the planned change and 
 
 1. Prometheus retention and scrape interval on the existing server (default plan: 30 s scrape, 15 d retention).
 2. Where Grafana and Prometheus run: same host, and what UID/URL the datasource should use. The plan assumes `http://localhost:9090` with uid `deye-prometheus`; adjust if they are remote.
-3. Mosquitto host/port and whether anonymous access is allowed from VLAN 210.
-4. Telegram bot: existing bot for other alerts, or a dedicated one for the inverter?
+3. Mosquitto host/port and whether anonymous access is allowed from VLAN 210 — unknown, so the MQTT bridge is driven entirely by `--host/--port` or environment variables and stays idle when unconfigured.
+4. Telegram bot: existing bot for other alerts, or a dedicated one for the inverter? The built-in notifier only needs `DEYE_TELEGRAM_TOKEN` and `DEYE_TELEGRAM_CHAT_ID`.
 5. Which write registers matter first: TOU schedule, grid-charge toggle, or charge/discharge current limits?
 

@@ -87,3 +87,15 @@ def test_zero_values_are_hidden(registers: dict[int, int]) -> None:
 def test_all_registers_have_unique_addresses_and_names() -> None:
     addresses = [(register.name, register.address) for register in REGISTERS]
     assert len(addresses) == len(set(addresses))
+
+
+def test_running_status_is_a_numeric_register() -> None:
+    # Upstream ships it as a text sensor; the exporter needs the raw word.
+    by_address = {register.address: register for register in REGISTERS}
+    assert by_address[0x003B].name == "Running Status"
+
+
+def test_running_status_is_decoded_from_the_snapshot(registers: dict[int, int]) -> None:
+    values = as_mapping(decode(registers))
+    assert values["Running Status"] == 2
+    assert describe(0x003B, values["Running Status"]) == "normal"
