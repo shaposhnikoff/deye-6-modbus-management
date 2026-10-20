@@ -1,0 +1,37 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --extra mqtt --frozen
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Format check
+        run: uv run ruff format --check .
+
+      - name: Tests
+        run: uv run pytest -q
+
+      - name: Validate monitoring configs
+        run: |
+          docker run --rm -v "$PWD/Monitoring/prometheus:/etc/prometheus" \
+            prom/prometheus:v2.54.1 \
+            promtool check config /etc/prometheus/prometheus.yml
+          docker run --rm -v "$PWD/Monitoring/prometheus:/etc/prometheus" \
+            prom/prometheus:v2.54.1 \
+            promtool check rules /etc/prometheus/rules/deye.rules

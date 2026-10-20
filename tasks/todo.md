@@ -17,6 +17,7 @@ blocked. Chat progress reports are written in Russian; this file stays in Englis
 - [x] `dmon top` console dashboard with screenshots in docs/assets
 - [x] Zero-valued registers kept in the cache so HA entities stay stable
 - [x] Operations runbook (docs/OPS.md) and a guarded-write flow diagram
+- [x] CI workflow (ruff, pytest, promtool) and CHANGELOG
 
 ## Next
 
