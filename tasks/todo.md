@@ -19,6 +19,7 @@ blocked. Chat progress reports are written in Russian; this file stays in Englis
 - [x] Operations runbook (docs/OPS.md) and a guarded-write flow diagram
 - [x] CI workflow (ruff, pytest, promtool) and CHANGELOG
 - [x] Lovelace dashboard for the inverter (deploy/homeassistant/lovelace-deye.yaml)
+- [x] Home Assistant Energy sources: Deye solar+battery, Shelly Pro 3EM grid
 
 ## Next
 

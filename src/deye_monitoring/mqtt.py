@@ -76,6 +76,18 @@ def state_payload(
 
 UNIT_BY_NAME = {register.name: register.unit for register in REGISTERS}
 
+# Home Assistant needs these to accept a sensor in the Energy dashboard.
+DEVICE_CLASS_BY_UNIT = {
+    "W": "power",
+    "kW": "power",
+    "kWh": "energy",
+    "V": "voltage",
+    "A": "current",
+    "°C": "temperature",
+    "Hz": "frequency",
+}
+STATE_CLASS_BY_UNIT = {"kWh": "total_increasing"}
+
 
 def discovery_configs(
     values: dict[str, float], serial: str | None, config: MqttConfig
@@ -107,7 +119,10 @@ def discovery_configs(
         }
         if unit:
             payload["unit_of_measurement"] = unit
-            payload["state_class"] = "measurement"
+            device_class = DEVICE_CLASS_BY_UNIT.get(unit)
+            if device_class:
+                payload["device_class"] = device_class
+            payload["state_class"] = STATE_CLASS_BY_UNIT.get(unit, "measurement")
         configs[f"{config.discovery_topic}/{unique}/config"] = json.dumps(
             payload, ensure_ascii=False
         )

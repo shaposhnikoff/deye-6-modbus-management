@@ -192,3 +192,20 @@ def test_availability_does_not_flap_on_repeated_ticks() -> None:
         payload for topic, payload, _ in client.published if topic == "deye/availability"
     ]
     assert availability == ["online"]
+
+
+def test_energy_sensors_get_energy_metadata() -> None:
+    """The Energy dashboard only accepts device_class=energy and total_increasing."""
+    configs = discovery_configs(
+        {"Total PV Production": 18.6, "PV1 Power": 654.0}, SERIAL, _config()
+    )
+    energy = json.loads(
+        next(payload for topic, payload in configs.items() if "total_pv_production" in topic)
+    )
+    assert energy["device_class"] == "energy"
+    assert energy["state_class"] == "total_increasing"
+    assert energy["unit_of_measurement"] == "kWh"
+
+    power = json.loads(next(payload for topic, payload in configs.items() if "pv1_power" in topic))
+    assert power["device_class"] == "power"
+    assert power["state_class"] == "measurement"

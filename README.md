@@ -252,6 +252,12 @@ Prometheus sees the exporter as a normal target (`deye-modbus`, scrape 30 s, las
 
 ![Prometheus target](docs/assets/prometheus-targets.png)
 
+Home Assistant Energy dashboard uses the live sources: Deye for solar and battery, Shelly Pro 3EM
+for the grid. Note that solar/battery statistics start from the moment the sensors were given
+`state_class: total_increasing`, so history before that is not backfilled.
+
+![Home Assistant energy](docs/assets/home-assistant-energy.png)
+
 A ready Lovelace dashboard for the inverter — battery gauge, live values, 24 h graph, battery and
 energy breakdowns, built from stock cards only (no HACS). The config lives in
 [`deploy/homeassistant/lovelace-deye.yaml`](deploy/homeassistant/lovelace-deye.yaml) and is
