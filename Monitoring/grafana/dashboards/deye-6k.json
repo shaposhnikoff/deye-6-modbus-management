@@ -923,7 +923,7 @@
     {
       "type": "table",
       "title": "Time of Use schedule",
-      "description": "One row per slot. Start is shown as HHMM, exactly as on the inverter screen (900 = 09:00).",
+      "description": "One row per slot. Start is HH:MM as on the inverter screen. Grid/Gen/GM/BU/CH are the charge-enable bits.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -941,8 +941,7 @@
             "cellOptions": {
               "type": "auto"
             }
-          },
-          "decimals": 0
+          }
         },
         "overrides": [
           {
@@ -960,7 +959,7 @@
           {
             "matcher": {
               "id": "byRegexp",
-              "options": "(Grid|Gen)"
+              "options": "^(Grid|Gen|GM|BU|CH)$"
             },
             "properties": [
               {
@@ -969,17 +968,21 @@
                   {
                     "type": "value",
                     "options": {
-                      "0": {
+                      "off": {
                         "text": "off",
                         "index": 0
                       },
-                      "1": {
+                      "on": {
                         "text": "ON",
                         "index": 1
                       }
                     }
                   }
                 ]
+              },
+              {
+                "id": "custom.align",
+                "value": "center"
               }
             ]
           }
@@ -987,6 +990,7 @@
       },
       "options": {
         "showHeader": true,
+        "cellHeight": "sm",
         "sortBy": [
           {
             "displayName": "Slot",
@@ -1000,100 +1004,55 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "deye_tou_slot_start_hhmm",
+          "expr": "deye_tou_slot_info{job=\"deye-modbus\"}",
           "format": "table",
           "instant": true,
-          "legendFormat": "Start",
+          "legendFormat": "__auto",
           "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "deye_tou_slot_power_watts",
-          "format": "table",
-          "instant": true,
-          "legendFormat": "Power W",
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "deye_tou_slot_voltage_volts",
-          "format": "table",
-          "instant": true,
-          "legendFormat": "Voltage V",
-          "refId": "C"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "deye_tou_slot_capacity_percent",
-          "format": "table",
-          "instant": true,
-          "legendFormat": "SoC %",
-          "refId": "D"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "deye_tou_charge{source=\"grid\"}",
-          "format": "table",
-          "instant": true,
-          "legendFormat": "Grid",
-          "refId": "E"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "deye_tou_charge{source=\"gen\"}",
-          "format": "table",
-          "instant": true,
-          "legendFormat": "Gen",
-          "refId": "F"
         }
       ],
       "transformations": [
         {
           "id": "labelsToFields",
           "options": {
-            "mode": "columns",
-            "keepLabels": [
-              "slot"
-            ]
+            "mode": "columns"
           }
-        },
-        {
-          "id": "merge",
-          "options": {}
         },
         {
           "id": "organize",
           "options": {
             "excludeByName": {
               "Time": true,
-              "__name__": true
+              "__name__": true,
+              "group": true,
+              "serial": true,
+              "job": true,
+              "instance": true,
+              "Value": true
             },
             "indexByName": {
               "slot": 0,
-              "Start": 1,
-              "Power W": 2,
-              "Voltage V": 3,
-              "SoC %": 4,
-              "Grid": 5,
-              "Gen": 6
+              "start": 1,
+              "power_w": 2,
+              "voltage_v": 3,
+              "soc_pct": 4,
+              "grid": 5,
+              "gen": 6,
+              "gm": 7,
+              "bu": 8,
+              "ch": 9
             },
             "renameByName": {
-              "slot": "Slot"
+              "slot": "Slot",
+              "start": "Start",
+              "power_w": "Power W",
+              "voltage_v": "Voltage V",
+              "soc_pct": "SoC %",
+              "grid": "Grid",
+              "gen": "Gen",
+              "gm": "GM",
+              "bu": "BU",
+              "ch": "CH"
             }
           }
         }

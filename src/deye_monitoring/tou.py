@@ -280,6 +280,25 @@ def readings(state: TouState) -> list[Reading]:
                 ),
             ]
         )
+        result.append(
+            reading(
+                f"Time of Use slot {slot.slot} info",
+                "deye_tou_slot_info",
+                1,
+                "",
+                address,
+                slot=slot_label,
+                start=slot.start_hhmm,
+                power_w=str(slot.power_w),
+                voltage_v=f"{slot.voltage_v:.2f}",
+                soc_pct=str(slot.capacity_pct),
+                grid="on" if slot.grid_charge else "off",
+                gen="on" if slot.gen_charge else "off",
+                gm="on" if slot.gm_mode else "off",
+                bu="on" if slot.bu_mode else "off",
+                ch="on" if slot.ch_mode else "off",
+            )
+        )
         for mode_name, enabled in (
             ("gm", slot.gm_mode),
             ("bu", slot.bu_mode),

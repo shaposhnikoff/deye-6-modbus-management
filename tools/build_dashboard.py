@@ -128,40 +128,26 @@ def table(title: str, grid: tuple[int, int, int, int], expr: str | None = None) 
 
 
 def tou_table(grid: tuple[int, int, int, int]) -> dict:
-    """One row per Time-of-Use slot, one column per parameter."""
+    """One row per Time-of-Use slot, built from the deye_tou_slot_info label set."""
     x, y, w, h = grid
-
-    def query(expr: str, legend: str, ref_id: str) -> dict:
-        return {
-            "datasource": DATASOURCE,
-            "expr": expr,
-            "format": "table",
-            "instant": True,
-            "legendFormat": legend,
-            "refId": ref_id,
-        }
-
     return {
         "type": "table",
         "title": "Time of Use schedule",
         "description": (
-            "One row per slot. Start is shown as HHMM, exactly as on the inverter screen "
-            "(900 = 09:00)."
+            "One row per slot. Start is HH:MM as on the inverter screen. "
+            "Grid/Gen/GM/BU/CH are the charge-enable bits."
         ),
         "datasource": DATASOURCE,
         "gridPos": {"x": x, "y": y, "w": w, "h": h},
         "fieldConfig": {
-            "defaults": {
-                "custom": {"align": "auto", "cellOptions": {"type": "auto"}},
-                "decimals": 0,
-            },
+            "defaults": {"custom": {"align": "auto", "cellOptions": {"type": "auto"}}},
             "overrides": [
                 {
                     "matcher": {"id": "byName", "options": "Slot"},
                     "properties": [{"id": "custom.width", "value": 70}],
                 },
                 {
-                    "matcher": {"id": "byRegexp", "options": "(Grid|Gen)"},
+                    "matcher": {"id": "byRegexp", "options": "^(Grid|Gen|GM|BU|CH)$"},
                     "properties": [
                         {
                             "id": "mappings",
@@ -169,45 +155,70 @@ def tou_table(grid: tuple[int, int, int, int]) -> dict:
                                 {
                                     "type": "value",
                                     "options": {
-                                        "0": {"text": "off", "index": 0},
-                                        "1": {"text": "ON", "index": 1},
+                                        "off": {"text": "off", "index": 0},
+                                        "on": {"text": "ON", "index": 1},
                                     },
-                                },
+                                }
                             ],
                         },
+                        {"id": "custom.align", "value": "center"},
                     ],
                 },
             ],
         },
         "options": {
             "showHeader": True,
+            "cellHeight": "sm",
             "sortBy": [{"displayName": "Slot", "desc": False}],
         },
         "targets": [
-            query("deye_tou_slot_start_hhmm", "Start", "A"),
-            query("deye_tou_slot_power_watts", "Power W", "B"),
-            query("deye_tou_slot_voltage_volts", "Voltage V", "C"),
-            query("deye_tou_slot_capacity_percent", "SoC %", "D"),
-            query('deye_tou_charge{source="grid"}', "Grid", "E"),
-            query('deye_tou_charge{source="gen"}', "Gen", "F"),
+            {
+                "datasource": DATASOURCE,
+                "expr": 'deye_tou_slot_info{job="deye-modbus"}',
+                "format": "table",
+                "instant": True,
+                "legendFormat": "__auto",
+                "refId": "A",
+            }
         ],
         "transformations": [
-            {"id": "labelsToFields", "options": {"mode": "columns", "keepLabels": ["slot"]}},
-            {"id": "merge", "options": {}},
+            {"id": "labelsToFields", "options": {"mode": "columns"}},
             {
                 "id": "organize",
                 "options": {
-                    "excludeByName": {"Time": True, "__name__": True},
+                    "excludeByName": {
+                        "Time": True,
+                        "__name__": True,
+                        "group": True,
+                        "serial": True,
+                        "job": True,
+                        "instance": True,
+                        "Value": True,
+                    },
                     "indexByName": {
                         "slot": 0,
-                        "Start": 1,
-                        "Power W": 2,
-                        "Voltage V": 3,
-                        "SoC %": 4,
-                        "Grid": 5,
-                        "Gen": 6,
+                        "start": 1,
+                        "power_w": 2,
+                        "voltage_v": 3,
+                        "soc_pct": 4,
+                        "grid": 5,
+                        "gen": 6,
+                        "gm": 7,
+                        "bu": 8,
+                        "ch": 9,
                     },
-                    "renameByName": {"slot": "Slot"},
+                    "renameByName": {
+                        "slot": "Slot",
+                        "start": "Start",
+                        "power_w": "Power W",
+                        "voltage_v": "Voltage V",
+                        "soc_pct": "SoC %",
+                        "grid": "Grid",
+                        "gen": "Gen",
+                        "gm": "GM",
+                        "bu": "BU",
+                        "ch": "CH",
+                    },
                 },
             },
         ],

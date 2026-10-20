@@ -38,6 +38,7 @@ TOU_METRICS = {
     "deye_tou_slot_capacity_percent",
     "deye_tou_charge",
     "deye_tou_mode",
+    "deye_tou_slot_info",
 }
 KNOWN_METRICS = (
     {metric_name(register) for register in REGISTERS}

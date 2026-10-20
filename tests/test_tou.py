@@ -112,6 +112,7 @@ def test_readings_have_metric_names_and_labels(state: tou.TouState) -> None:
         "deye_tou_slot_capacity_percent",
         "deye_tou_charge",
         "deye_tou_mode",
+        "deye_tou_slot_info",
     }
     day = next(reading for reading in readings if reading.metric == "deye_tou_day")
     assert day.labels == {"day": "mon"}
@@ -121,6 +122,26 @@ def test_readings_have_metric_names_and_labels(state: tou.TouState) -> None:
     charge = [r for r in readings if r.metric == "deye_tou_charge"]
     assert len(charge) == 12  # six slots, grid and generator
     assert {r.labels["source"] for r in charge} == {"grid", "gen"}
+
+
+def test_info_metric_carries_slot_parameters(state: tou.TouState) -> None:
+    readings = tou.readings(state)
+    info = [r for r in readings if r.metric == "deye_tou_slot_info"]
+    assert len(info) == 6
+    first = info[0]
+    assert first.value == 1
+    assert first.labels == {
+        "slot": "1",
+        "start": "01:00",
+        "power_w": "5000",
+        "voltage_v": "49.00",
+        "soc_pct": "85",
+        "grid": "on",
+        "gen": "off",
+        "gm": "on",
+        "bu": "off",
+        "ch": "off",
+    }
 
 
 def test_decode_all_includes_tou_values(registers: dict[int, int]) -> None:
