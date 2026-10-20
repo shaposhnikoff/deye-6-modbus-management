@@ -34,6 +34,9 @@ def unit_suffix(unit: str) -> str:
 
 def metric_name(reading: Reading) -> str:
     """Return the full metric name for a reading, including the unit suffix."""
+    explicit = getattr(reading, "metric", None)  # Register objects have no override
+    if explicit:
+        return explicit
     base = f"deye_{slugify(reading.name)}"
     suffix = unit_suffix(reading.unit)
     return f"{base}_{suffix}" if suffix else base

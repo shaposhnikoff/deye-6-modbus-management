@@ -100,7 +100,7 @@ def stat(
     }
 
 
-def table(title: str, grid: tuple[int, int, int, int]) -> dict:
+def table(title: str, grid: tuple[int, int, int, int], expr: str | None = None) -> dict:
     x, y, w, h = grid
     return {
         "type": "table",
@@ -113,7 +113,7 @@ def table(title: str, grid: tuple[int, int, int, int]) -> dict:
         "targets": [
             {
                 "datasource": DATASOURCE,
-                "expr": '{__name__=~"deye_.*", job="deye-modbus"}',
+                "expr": expr or '{__name__=~"deye_.*", job="deye-modbus"}',
                 "format": "table",
                 "instant": True,
                 "legendFormat": "__auto",
@@ -259,6 +259,11 @@ def build() -> dict:
             "kwatth",
         ),
         table("All exported metrics", (0, 35, 24, 10)),
+        table(
+            "Time of Use schedule",
+            (0, 45, 24, 10),
+            expr='{__name__=~"deye_tou_.*", job="deye-modbus"}',
+        ),
     ]
 
     for index, panel in enumerate(panels, start=1):

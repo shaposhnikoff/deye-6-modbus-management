@@ -18,7 +18,7 @@ from deye_monitoring.snapshot import (
     BLOCKS,
     Reading,
     as_mapping,
-    decode,
+    decode_all,
     read_registers,
     serial_number,
 )
@@ -90,10 +90,11 @@ def _config(args: argparse.Namespace) -> ModbusConfig:
     )
 
 
-def _collect(config: ModbusConfig) -> tuple[dict[int, int], list[Reading]]:
+def _collect(config: ModbusConfig) -> tuple[dict[int, int], list[Reading], object | None]:
     with ModbusClient(config) as client:
         registers = read_registers(client)
-    return registers, decode(registers)
+    readings, tou_state = decode_all(registers)
+    return registers, readings, tou_state
 
 
 def _print_table(readings: list[Reading], serial: str | None) -> None:
@@ -117,26 +118,28 @@ def _timestamp() -> str:
 
 def cmd_read(args: argparse.Namespace) -> int:
     """Print a single human readable snapshot."""
-    registers, readings = _collect(_config(args))
+    registers, readings, _tou_state = _collect(_config(args))
     _print_table(readings, serial_number(registers))
     return 0
 
 
 def cmd_json(args: argparse.Namespace) -> int:
     """Print a single JSON snapshot."""
-    registers, readings = _collect(_config(args))
-    payload = {
+    registers, readings, tou_state = _collect(_config(args))
+    payload: dict[str, object] = {
         "timestamp": _timestamp(),
         "serial": serial_number(registers),
         "values": as_mapping(readings),
     }
+    if tou_state is not None:
+        payload["tou"] = tou_state.as_dict()
     print(json.dumps(payload, ensure_ascii=False))
     return 0
 
 
 def cmd_dump(args: argparse.Namespace) -> int:
     """Print the raw holding registers, eight words per line."""
-    registers, _ = _collect(_config(args))
+    registers, _readings, _tou_state = _collect(_config(args))
     addresses = sorted(registers)
     for block_start, _count in BLOCKS:
         print(f"-- block 0x{block_start:04X}")
@@ -154,7 +157,7 @@ def cmd_watch(args: argparse.Namespace) -> int:
     while True:
         started = time.monotonic()
         try:
-            registers, readings = _collect(config)
+            registers, readings, _tou_state = _collect(config)
         except ModbusError as error:
             print(json.dumps({"timestamp": _timestamp(), "error": str(error)}), flush=True)
         else:

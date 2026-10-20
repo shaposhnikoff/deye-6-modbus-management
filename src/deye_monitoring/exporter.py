@@ -53,7 +53,10 @@ def render(sample: Sample) -> str:
                 lines.append(f"# HELP {name} {reading.name}")
                 lines.append(f"# TYPE {name} gauge")
                 seen.add(name)
-            labels = f'group="{_escape_label(reading.group)}",serial="{serial}"'
+            pairs = {"group": reading.group, "serial": serial}
+            if reading.labels:
+                pairs.update(reading.labels)
+            labels = ",".join(f'{key}="{_escape_label(value)}"' for key, value in pairs.items())
             lines.append(f"{name}{{{labels}}} {reading.value}")
 
     status = _status_value(sample)

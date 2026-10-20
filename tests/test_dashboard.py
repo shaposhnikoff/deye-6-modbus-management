@@ -28,16 +28,30 @@ MONITORING = ROOT / "Monitoring"
 DASHBOARD = MONITORING / "grafana/dashboards/deye-6k.json"
 
 HEALTH_METRICS = {SCRAPE_SUCCESS, SCRAPE_DURATION, LAST_SUCCESS, "deye_data_age_seconds"}
+TOU_METRICS = {
+    "deye_tou_enabled",
+    "deye_tou_day",
+    "deye_tou_slot_start_minutes",
+    "deye_tou_slot_power_watts",
+    "deye_tou_slot_voltage_volts",
+    "deye_tou_slot_capacity_percent",
+    "deye_tou_charge",
+    "deye_tou_mode",
+}
 KNOWN_METRICS = (
     {metric_name(register) for register in REGISTERS} | HEALTH_METRICS | {RUNNING_STATUS_METRIC}
 )
 
 METRIC_TOKEN = re.compile(r"\bdeye_[a-z0-9_]+\b")
 
-def metrics_in(expr: str) -> set[str]:
-    """Metric names referenced by an expression, ignoring quoted label values."""
-    return set(METRIC_TOKEN.findall(re.sub(r'"[^"]*"', '""', expr)))
 
+def metrics_in(expr: str) -> set[str]:
+    """Metric names referenced by an expression, ignoring quoted label values.
+
+    Trailing underscores are dropped: ``deye_tou_.*`` is a regex prefix, not a metric.
+    """
+    tokens = METRIC_TOKEN.findall(re.sub(r'"[^"]*"', '""', expr))
+    return {token for token in tokens if not token.endswith("_")}
 
 
 @pytest.fixture(scope="module")
@@ -147,6 +161,16 @@ def test_alert_rules_reference_known_metrics() -> None:
     for rule in alerts.values():
         unknown = metrics_in(rule["expr"]) - KNOWN_METRICS
         assert not unknown, f"{rule['alert']} references unknown metrics: {sorted(unknown)}"
+
+
+def test_alert_expressions_avoid_two_argument_aggregators() -> None:
+    # max(a, b) is not valid PromQL; this broke a deploy once.
+    rules = yaml.safe_load((MONITORING / "prometheus/rules/deye.rules").read_text())
+    for group in rules["groups"]:
+        for rule in group["rules"]:
+            assert not re.search(r"\b(max|min|sum|avg|count)\s*\([^)]*,", rule["expr"]), rule[
+                "alert"
+            ]
 
 
 def test_every_critical_alert_has_annotations() -> None:

@@ -23,13 +23,13 @@ groups:
           description: "Last successful poll was {{ $value | humanizeDuration }} ago."
 
       - alert: DeyeOverTemperature
-        expr: max(deye_dc_temperature_celsius, deye_ac_temperature_celsius) > 65
+        expr: deye_dc_temperature_celsius > 65 or deye_ac_temperature_celsius > 65
         for: 5m
         labels:
           severity: warning
         annotations:
           summary: "Inverter is running hot"
-          description: "DC {{ with printf \"deye_dc_temperature_celsius\" | query }}{{ . | first | value }}{{ end }} C, AC {{ with printf \"deye_ac_temperature_celsius\" | query }}{{ . | first | value }}{{ end }} C."
+          description: "Temperature {{ $value }} C is above 65 C (serial {{ $labels.serial }})."
 
       - alert: DeyeFault
         expr: deye_running_status{status="fault"} == 1

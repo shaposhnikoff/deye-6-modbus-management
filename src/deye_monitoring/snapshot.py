@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from deye_monitoring.modbus import ModbusClient
 from deye_monitoring.registers import REGISTERS, Register
+
+if TYPE_CHECKING:
+    from deye_monitoring.tou import TouState
 
 # The inverter exposes its data in four contiguous blocks of 125 holding registers.
 BLOCKS: tuple[tuple[int, int], ...] = (
@@ -28,6 +32,8 @@ class Reading:
     unit: str
     address: int
     group: str
+    labels: dict[str, str] | None = None
+    metric: str | None = None
 
 
 def read_registers(
@@ -105,6 +111,17 @@ def decode(registers: dict[int, int]) -> list[Reading]:
         if reading is not None and reading.value != 0:
             readings.append(reading)
     return readings
+
+
+def decode_all(registers: dict[int, int]) -> tuple[list[Reading], TouState | None]:
+    """Decode the standard map plus the Time-of-Use block."""
+    from deye_monitoring import tou
+
+    readings = decode(registers)
+    state = tou.parse(registers)
+    if state is not None:
+        readings.extend(tou.readings(state))
+    return readings, state
 
 
 def as_mapping(readings: list[Reading]) -> dict[str, float]:
