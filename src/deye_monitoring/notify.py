@@ -80,12 +80,12 @@ class Notifier:
         for key, text in current.items():
             last = self._last_sent.get(key)
             if last is None or now - last >= self.config.cooldown:
-                self._send(self._format(sample, text, resolved=False))
+                self.send(self._format(sample, text, resolved=False))
                 self._last_sent[key] = now
 
         for key, text in self._firing.items():
             if key not in current:
-                self._send(self._format(sample, text, resolved=True))
+                self.send(self._format(sample, text, resolved=True))
 
         self._firing = current
 
@@ -124,7 +124,8 @@ class Notifier:
         body = _escape(text)
         return f"<b>{header}</b> Deye SUN-6K\nSerial: <code>{serial}</code>\n{body}"
 
-    def _send(self, text: str) -> None:
+    def send(self, text: str) -> None:
+        """Send one HTML message; failures are logged, never raised."""
         url = API_URL.format(token=self.config.token)
         payload = {
             "chat_id": self.config.chat_id,

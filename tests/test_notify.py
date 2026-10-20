@@ -148,6 +148,16 @@ def test_transport_failure_does_not_raise() -> None:
     notifier.handle(_sample(status=4))  # must not raise
 
 
+def test_send_posts_to_the_bot_api() -> None:
+    transport = FakeTransport()
+    notifier = _notifier(transport, FakeClock())
+    notifier.send("<b>hello</b>")
+    request = transport.requests[0]
+    assert request["url"] == "https://api.telegram.org/bottoken/sendMessage"
+    assert request["payload"]["text"] == "<b>hello</b>"
+    assert request["payload"]["chat_id"] == "42"
+
+
 def test_html_is_escaped() -> None:
     transport = FakeTransport()
     notifier = _notifier(transport, FakeClock())
