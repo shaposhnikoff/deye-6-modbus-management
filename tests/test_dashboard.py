@@ -128,7 +128,7 @@ def test_committed_dashboard_matches_the_generator(dashboard: dict) -> None:
 def test_prometheus_config_is_valid() -> None:
     config = yaml.safe_load((MONITORING / "prometheus/prometheus.yml").read_text())
     jobs = {job["job_name"] for job in config["scrape_configs"]}
-    assert "deye_modbus" in jobs
+    assert "deye-modbus" in jobs
     assert "rules/*.rules" in config["rule_files"]
     target = config["scrape_configs"][0]["static_configs"][0]["targets"][0]
     assert target.endswith(":9101")
@@ -136,7 +136,7 @@ def test_prometheus_config_is_valid() -> None:
 
 def test_scrape_snippet_is_reusable() -> None:
     snippet = yaml.safe_load((MONITORING / "prometheus/deye-scrape.yml").read_text())
-    assert snippet[0]["job_name"] == "deye_modbus"
+    assert snippet[0]["job_name"] == "deye-modbus"
     assert snippet[0]["static_configs"][0]["targets"]
 
 

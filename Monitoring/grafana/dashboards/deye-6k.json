@@ -896,7 +896,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "{__name__=~\"deye_.*\", job=\"deye_modbus\"}",
+          "expr": "{__name__=~\"deye_.*\", job=\"deye-modbus\"}",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -951,8 +951,8 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "query": "label_values(up{job=\"deye_modbus\"}, instance)",
-        "definition": "label_values(up{job=\"deye_modbus\"}, instance)",
+        "query": "label_values(up{job=\"deye-modbus\"}, instance)",
+        "definition": "label_values(up{job=\"deye-modbus\"}, instance)",
         "includeAll": true,
         "multi": true,
         "refresh": 2
