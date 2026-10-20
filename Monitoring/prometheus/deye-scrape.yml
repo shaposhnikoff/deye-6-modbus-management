@@ -1,4 +1,4 @@
- - job_name: deye
+ - job_name: deye_modbus
    scrape_interval: 30s
    scrape_timeout: 10s
    static_configs:

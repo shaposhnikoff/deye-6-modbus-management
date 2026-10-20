@@ -113,7 +113,7 @@ def table(title: str, grid: tuple[int, int, int, int]) -> dict:
         "targets": [
             {
                 "datasource": DATASOURCE,
-                "expr": '{__name__=~"deye_.*", job="deye"}',
+                "expr": '{__name__=~"deye_.*", job="deye_modbus"}',
                 "format": "table",
                 "instant": True,
                 "legendFormat": "__auto",
@@ -290,8 +290,8 @@ def build() -> dict:
                     "label": "Instance",
                     "type": "query",
                     "datasource": DATASOURCE,
-                    "query": 'label_values(up{job="deye"}, instance)',
-                    "definition": 'label_values(up{job="deye"}, instance)',
+                    "query": 'label_values(up{job="deye_modbus"}, instance)',
+                    "definition": 'label_values(up{job="deye_modbus"}, instance)',
                     "includeAll": True,
                     "multi": True,
                     "refresh": 2,

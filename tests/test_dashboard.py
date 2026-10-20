@@ -34,6 +34,11 @@ KNOWN_METRICS = (
 
 METRIC_TOKEN = re.compile(r"\bdeye_[a-z0-9_]+\b")
 
+def metrics_in(expr: str) -> set[str]:
+    """Metric names referenced by an expression, ignoring quoted label values."""
+    return set(METRIC_TOKEN.findall(re.sub(r'"[^"]*"', '""', expr)))
+
+
 
 @pytest.fixture(scope="module")
 def dashboard() -> dict:
@@ -76,7 +81,7 @@ def test_every_target_uses_the_datasource_variable(dashboard: dict) -> None:
 def test_every_expression_references_a_known_metric(dashboard: dict) -> None:
     referenced: set[str] = set()
     for target in _walk_targets(dashboard["panels"]):
-        referenced.update(METRIC_TOKEN.findall(target["expr"]))
+        referenced.update(metrics_in(target["expr"]))
     unknown = referenced - KNOWN_METRICS
     assert not unknown, f"dashboard references unknown metrics: {sorted(unknown)}"
     assert referenced, "dashboard references no metrics at all"
@@ -123,29 +128,29 @@ def test_committed_dashboard_matches_the_generator(dashboard: dict) -> None:
 def test_prometheus_config_is_valid() -> None:
     config = yaml.safe_load((MONITORING / "prometheus/prometheus.yml").read_text())
     jobs = {job["job_name"] for job in config["scrape_configs"]}
-    assert "deye" in jobs
-    assert "deye-alerts.yml" in config["rule_files"]
+    assert "deye_modbus" in jobs
+    assert "rules/*.rules" in config["rule_files"]
     target = config["scrape_configs"][0]["static_configs"][0]["targets"][0]
     assert target.endswith(":9101")
 
 
 def test_scrape_snippet_is_reusable() -> None:
     snippet = yaml.safe_load((MONITORING / "prometheus/deye-scrape.yml").read_text())
-    assert snippet[0]["job_name"] == "deye"
+    assert snippet[0]["job_name"] == "deye_modbus"
     assert snippet[0]["static_configs"][0]["targets"]
 
 
 def test_alert_rules_reference_known_metrics() -> None:
-    rules = yaml.safe_load((MONITORING / "prometheus/deye-alerts.yml").read_text())
+    rules = yaml.safe_load((MONITORING / "prometheus/rules/deye.rules").read_text())
     alerts = {rule["alert"]: rule for group in rules["groups"] for rule in group["rules"]}
     assert {"DeyeScrapeFailing", "DeyeDataStale", "DeyeOverTemperature", "DeyeFault"} <= set(alerts)
     for rule in alerts.values():
-        unknown = set(METRIC_TOKEN.findall(rule["expr"])) - KNOWN_METRICS
+        unknown = metrics_in(rule["expr"]) - KNOWN_METRICS
         assert not unknown, f"{rule['alert']} references unknown metrics: {sorted(unknown)}"
 
 
 def test_every_critical_alert_has_annotations() -> None:
-    rules = yaml.safe_load((MONITORING / "prometheus/deye-alerts.yml").read_text())
+    rules = yaml.safe_load((MONITORING / "prometheus/rules/deye.rules").read_text())
     for group in rules["groups"]:
         for rule in group["rules"]:
             assert rule["annotations"]["summary"]

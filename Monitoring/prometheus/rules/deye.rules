@@ -50,7 +50,7 @@ groups:
           description: "Running status is alarm on serial {{ $labels.serial }}."
 
       - alert: DeyeExporterDown
-        expr: up{job="deye"} == 0
+        expr: up{job="deye_modbus"} == 0
         for: 2m
         labels:
           severity: critical

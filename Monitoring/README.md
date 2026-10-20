@@ -8,7 +8,7 @@ Monitoring/
 ├── prometheus/
 │   ├── prometheus.yml     # complete standalone config
 │   ├── deye-scrape.yml    # snippet to paste into an existing config
-│   └── deye-alerts.yml    # alerting + recording rules
+│   └── rules/deye.rules   # alerting rules (matches rule_files: rules/*.rules)
 ├── grafana/
 │   ├── dashboards/deye-6k.json                 # uid: deye-6k
 │   └── provisioning/
@@ -23,14 +23,15 @@ Monitoring/
 Standalone:
 
 ```bash
-cp prometheus/prometheus.yml prometheus/deye-alerts.yml /etc/prometheus/
+cp prometheus/prometheus.yml /etc/prometheus/
+mkdir -p /etc/prometheus/rules && cp prometheus/rules/deye.rules /etc/prometheus/rules/
 promtool check config /etc/prometheus/prometheus.yml
-promtool check rules /etc/prometheus/deye-alerts.yml
+promtool check rules /etc/prometheus/rules/deye.rules
 systemctl reload prometheus          # or: curl -X POST localhost:9090/-/reload
 ```
 
-Existing server — append `deye-scrape.yml` to `scrape_configs` and add `deye-alerts.yml` to
-`rule_files`. The exporter listens on `192.168.10.39:9101`.
+Existing server — append `deye-scrape.yml` to `scrape_configs` and drop `deye.rules` into the existing
+`rules/` directory (their `rule_files` already globs `rules/*.rules`). The exporter listens on `192.168.10.39:9101`.
 
 Verify:
 
