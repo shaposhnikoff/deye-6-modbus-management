@@ -67,28 +67,27 @@ Example JSON line:
 
 ## Run as a service
 
-`/etc/systemd/system/deye-monitoring.service`:
-
-```ini
-[Unit]
-Description=Deye inverter Modbus monitoring
-After=network-online.target
-
-[Service]
-User=max
-WorkingDirectory=/home/max/DEYE Monitoring
-ExecStart=/home/max/.local/bin/uv run dmon watch --interval 10
-Restart=always
-RestartSec=15
-
-[Install]
-WantedBy=multi-user.target
-```
+Unit file: [`deploy/systemd/deye-monitoring.service`](deploy/systemd/deye-monitoring.service),
+environment template: [`deploy/systemd/deye-monitoring.env.example`](deploy/systemd/deye-monitoring.env.example).
 
 ```bash
-sudo systemctl daemon-reload && sudo systemctl enable --now deye-monitoring
+sudo install -m 0644 deploy/systemd/deye-monitoring.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now deye-monitoring
+systemctl status deye-monitoring
 journalctl -u deye-monitoring -f
 ```
+
+Two details that bite on this host:
+
+- The repository path contains a space (`/home/max/DEYE Monitoring`), and systemd does **not**
+  accept a quoted `WorkingDirectory`. The unit therefore runs from `/home/max` with an absolute,
+  quoted `ExecStart`, which needs no working directory.
+- `ExecStart` points at the venv entry point (`.venv/bin/dmon`), not at `uv run`. The venv script
+  is a `/bin/sh` trampoline, so signals reach the collector and it shuts down cleanly.
+
+Optional settings live in `/etc/deye-monitoring.env` (`DEYE_LISTEN`, `DEYE_INTERVAL`,
+`DEYE_PORT`, Telegram variables); every one of them has a built-in default.
 
 ## Register map
 
