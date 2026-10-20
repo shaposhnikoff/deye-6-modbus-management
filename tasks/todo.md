@@ -18,6 +18,7 @@ blocked. Chat progress reports are written in Russian; this file stays in Englis
 - [x] Zero-valued registers kept in the cache so HA entities stay stable
 - [x] Operations runbook (docs/OPS.md) and a guarded-write flow diagram
 - [x] CI workflow (ruff, pytest, promtool) and CHANGELOG
+- [x] Lovelace dashboard for the inverter (deploy/homeassistant/lovelace-deye.yaml)
 
 ## Next
 

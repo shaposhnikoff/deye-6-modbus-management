@@ -1,0 +1,104 @@
+# Lovelace view for the Deye inverter.
+#
+# Uses only built-in cards, so it works without HACS. Entity ids are those created by MQTT
+# discovery (device "Deye SUN-6K"). Paste as a view into your dashboard, or import the whole file
+# as a new dashboard: Settings -> Dashboards -> Add dashboard -> Web page / YAML.
+#
+# Installed on the home instance as the "Deye" dashboard at /deye-inverter
+# (Home Assistant requires a hyphen in the dashboard url_path).
+
+title: Deye
+path: deye
+icon: mdi:solar-power
+cards:
+  - type: markdown
+    content: |
+      ## Deye SUN-6K-SG05LP1
+      Serial **2601255637** · 6 kW · 2 MPPT · single phase
+      Data comes from the Raspberry Pi over Modbus RTU → MQTT, once every 10 s.
+
+  - type: gauge
+    entity: sensor.deye_sun_6k_battery
+    name: Battery SOC
+    unit: "%"
+    min: 0
+    max: 100
+    needle: true
+    severity:
+      green: 50
+      yellow: 25
+      red: 0
+
+  - type: glance
+    title: Right now
+    columns: 4
+    entities:
+      - entity: sensor.deye_sun_6k_pv1_power
+        name: PV1
+      - entity: sensor.deye_sun_6k_pv2_power
+        name: PV2
+      - entity: sensor.deye_sun_6k_load_power
+        name: Load
+      - entity: sensor.deye_sun_6k_grid_power
+        name: Grid
+
+  - type: history-graph
+    title: Last 24 hours
+    hours_to_show: 24
+    entities:
+      - entity: sensor.deye_sun_6k_pv1_power
+        name: PV1
+      - entity: sensor.deye_sun_6k_battery_power
+        name: Battery
+      - entity: sensor.deye_sun_6k_load_power
+        name: Load
+      - entity: sensor.deye_sun_6k_grid_power
+        name: Grid
+
+  - type: entities
+    title: Battery
+    entities:
+      - entity: sensor.deye_sun_6k_battery
+        name: State of charge
+      - entity: sensor.deye_sun_6k_battery_voltage
+        name: Voltage
+      - entity: sensor.deye_sun_6k_battery_current
+        name: Current
+      - entity: sensor.deye_sun_6k_battery_power
+        name: Power
+      - entity: sensor.deye_sun_6k_battery_temperature
+        name: Temperature
+      - entity: sensor.deye_sun_6k_daily_battery_charge
+        name: Charged today
+      - entity: sensor.deye_sun_6k_daily_battery_discharge
+        name: Discharged today
+
+  - type: entities
+    title: Grid, load and inverter
+    entities:
+      - entity: sensor.deye_sun_6k_grid_voltage
+        name: Grid voltage
+      - entity: sensor.deye_sun_6k_grid_frequency
+        name: Grid frequency
+      - entity: sensor.deye_sun_6k_load_l1_voltage
+        name: Load voltage
+      - entity: sensor.deye_sun_6k_dc_temperature
+        name: DC temperature
+      - entity: sensor.deye_sun_6k_ac_temperature
+        name: AC temperature
+      - entity: sensor.deye_sun_6k_device_rated_power
+        name: Rated power
+
+  - type: entities
+    title: Energy today
+    entities:
+      - entity: sensor.deye_sun_6k_daily_pv_production
+        name: PV production
+      - entity: sensor.deye_sun_6k_daily_load_consumption
+        name: Load consumption
+      - entity: sensor.deye_sun_6k_daily_energy_bought
+        name: Bought from grid
+      - entity: sensor.deye_sun_6k_daily_energy_sold
+        name: Sold to grid
+      - entity: sensor.deye_sun_6k_total_pv_production
+        name: PV total

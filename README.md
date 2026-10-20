@@ -252,6 +252,13 @@ Prometheus sees the exporter as a normal target (`deye-modbus`, scrape 30 s, las
 
 ![Prometheus target](docs/assets/prometheus-targets.png)
 
+A ready Lovelace dashboard for the inverter — battery gauge, live values, 24 h graph, battery and
+energy breakdowns, built from stock cards only (no HACS). The config lives in
+[`deploy/homeassistant/lovelace-deye.yaml`](deploy/homeassistant/lovelace-deye.yaml) and is
+installed as the `Deye` dashboard (`/deye-inverter`) on the home instance:
+
+![Home Assistant dashboard](docs/assets/home-assistant-card.png)
+
 The terminal frames are generated from live cache data with
 `uv run --with pillow python tools/render_tui_png.py docs/assets/dmon-top.png docs/assets/dmon-top-tou.png`
 so they can be refreshed after a layout change.
