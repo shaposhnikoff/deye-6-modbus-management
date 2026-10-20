@@ -228,6 +228,24 @@ Time-of-Use schedule on the second page.
 Colour thresholds: battery below 25 % is yellow, below 15 % red; DC/AC temperature above 60 °C
 yellow, above 70 °C red; grid frequency outside 49–51 Hz yellow.
 
+### Screenshots
+
+Overview page — PV, battery gauge, grid, load and inverter temperatures:
+
+![dmon top overview](docs/assets/dmon-top.png)
+
+Time-of-Use page (`2`) — six slots with start, power, target voltage, SoC and charge sources:
+
+![dmon top time of use](docs/assets/dmon-top-tou.png)
+
+Grafana dashboard fed by the exporter (`deye-6k`, 15 panels):
+
+![Grafana dashboard](docs/assets/grafana-dashboard.png)
+
+The terminal frames are generated from live cache data with
+`uv run --with pillow python tools/render_tui_png.py docs/assets/dmon-top.png docs/assets/dmon-top-tou.png`
+so they can be refreshed after a layout change.
+
 ## Writing (Time-of-Use)
 
 Monitoring stays read-only. Changing the schedule is a separate, explicit command:
