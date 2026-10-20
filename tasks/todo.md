@@ -16,6 +16,7 @@ blocked. Chat progress reports are written in Russian; this file stays in Englis
 - [x] Home Assistant discovery verified in the live instance (137 entities)
 - [x] `dmon top` console dashboard with screenshots in docs/assets
 - [x] Zero-valued registers kept in the cache so HA entities stay stable
+- [x] Operations runbook (docs/OPS.md) and a guarded-write flow diagram
 
 ## Next
 
