@@ -118,6 +118,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--prefix", default=os.environ.get("DEYE_MQTT_PREFIX", "homeassistant")
     )
     publish_cmd.add_argument("--node", default=os.environ.get("DEYE_MQTT_NODE", "deye_6k"))
+
+    top_cmd = subparsers.add_parser(
+        "top", parents=[common], help="live console dashboard (reads the cache)"
+    )
+    top_cmd.add_argument(
+        "--cache",
+        default=os.environ.get("DEYE_CACHE_PATH", "/run/deye/state.json"),
+        help="cache file written by serve (default: %(default)s)",
+    )
+    top_cmd.add_argument("--interval", type=float, default=2.0, help="refresh interval, seconds")
+    top_cmd.add_argument("--once", action="store_true", help="print one frame and exit")
     return parser
 
 
@@ -351,6 +362,17 @@ def cmd_mqtt(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_top(args: argparse.Namespace) -> int:
+    """Live dashboard, or a single plain-text frame with ``--once``."""
+    from deye_monitoring import tui
+    from deye_monitoring.cache import read_snapshot
+
+    if args.once:
+        print(tui.render_text(read_snapshot(args.cache), args.cache))
+        return 0
+    return tui.run(args.cache, args.interval)
+
+
 def cmd_publish(args: argparse.Namespace) -> int:
     """Publish MQTT state from the local cache until interrupted."""
     from deye_monitoring.cache import read_snapshot
@@ -405,6 +427,7 @@ def main(argv: list[str] | None = None) -> int:
         "serve": cmd_serve,
         "mqtt": cmd_mqtt,
         "publish": cmd_publish,
+        "top": cmd_top,
     }
     try:
         return handlers[args.command](args)

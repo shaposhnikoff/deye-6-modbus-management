@@ -206,6 +206,28 @@ Two gotchas worth remembering:
   `uv run python tools/cleanup_discovery.py`, otherwise Home Assistant keeps "unavailable"
   entities forever.
 
+## Live console (htop style)
+
+```bash
+uv run dmon top            # full-screen dashboard, refresh every 2 s
+uv run dmon top --once     # one frame as plain text (useful over a slow link or in a script)
+```
+
+It reads the local cache, so it works over any SSH session and never competes with the service for
+the serial port. Sections: PV, battery (with a gauge), grid, load, inverter temperatures, plus the
+Time-of-Use schedule on the second page.
+
+| Key | Action |
+|---|---|
+| `q` | quit |
+| `p` | pause / resume |
+| `+` / `-` | change refresh interval |
+| `1` / `2` | overview / Time-of-Use page |
+| `r` | force redraw |
+
+Colour thresholds: battery below 25 % is yellow, below 15 % red; DC/AC temperature above 60 °C
+yellow, above 70 °C red; grid frequency outside 49–51 Hz yellow.
+
 ## Writing (Time-of-Use)
 
 Monitoring stays read-only. Changing the schedule is a separate, explicit command:
@@ -263,6 +285,7 @@ src/deye_monitoring/
   write.py       # guarded writes, allow-list, readback, audit
   write_cli.py   # dmon-write list / plan / set
   mqtt.py        # state + Home Assistant discovery
+  tui.py         # dmon top dashboard
 tools/
   generate_registers.py  # regenerates registers.py from the vendored map
   upstream-map/*.yaml    # vendored ESPHome register definitions
