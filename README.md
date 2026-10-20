@@ -264,6 +264,7 @@ Monitoring stays read-only. Changing the schedule is a separate, explicit comman
 uv run dmon-write list                                        # current values, read-only
 uv run dmon-write plan tou.1.power=5500                       # validate only
 uv run dmon-write set tou.1.power=5500 --confirm              # write + readback + audit
+uv run dmon-write verify tou.1.power=5500                     # read-only drift check
 ```
 
 Every write is range-checked, read back from the inverter and appended to

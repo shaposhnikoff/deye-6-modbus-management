@@ -177,3 +177,34 @@ def test_verification_failure_exits_3(
     )
     record = json.loads(log.read_text().splitlines()[0])
     assert record["confirmed"] is False
+
+
+def test_verify_reports_match(fake_client: type[FakeClient], capsys: pytest.CaptureFixture) -> None:
+    assert write_cli.main(["verify", "--port", "fake", "tou.1.power=5000", "tou.1.start=100"]) == 0
+    out = capsys.readouterr().out
+    assert "MATCH" in out
+    assert "2/2 match" in out
+
+
+def test_verify_reports_drift_and_exits_1(
+    fake_client: type[FakeClient], capsys: pytest.CaptureFixture
+) -> None:
+    assert write_cli.main(["verify", "--port", "fake", "tou.1.power=9999"]) == 1
+    out = capsys.readouterr().out
+    assert "DRIFT" in out
+    assert "0/1 match" in out
+
+
+def test_verify_checks_bits(fake_client: type[FakeClient]) -> None:
+    # register 274 reads 5 = grid on, GM on
+    assert write_cli.main(["verify", "--port", "fake", "tou.1.grid_charge=1"]) == 0
+    assert write_cli.main(["verify", "--port", "fake", "tou.1.gen_charge=1"]) == 1
+
+
+def test_verify_never_writes(fake_client: type[FakeClient]) -> None:
+    write_cli.main(["verify", "--port", "fake", "tou.1.power=9999"])
+    assert _last().writes == []
+
+
+def test_verify_unknown_key_exits_2(fake_client: type[FakeClient]) -> None:
+    assert write_cli.main(["verify", "--port", "fake", "tou.1.nope=1"]) == 2

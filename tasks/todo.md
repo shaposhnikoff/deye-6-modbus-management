@@ -19,7 +19,7 @@ blocked. Chat progress reports are written in Russian; this file stays in Englis
 
 ## Next
 
-- [ ] `dmon-write verify` — compare the live schedule with an expected one (read-only)
+- [x] `dmon-write verify` — compare the live schedule with an expected one (read-only)
 - [ ] Operator verifies TOU writes against the inverter screen, then writes are enabled in practice
 
 ## Blocked

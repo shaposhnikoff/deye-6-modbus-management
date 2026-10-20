@@ -21,6 +21,7 @@ from deye_monitoring.write import (
     WriteVerificationError,
     apply_change,
     audit,
+    matches,
     plan_change,
     resolve,
 )
@@ -62,6 +63,13 @@ def build_parser() -> argparse.ArgumentParser:
     apply_cmd.add_argument(
         "--confirm", action="store_true", help="actually write; without it this is a dry run"
     )
+
+    verify = subparsers.add_parser(
+        "verify",
+        parents=[common],
+        help="compare the live schedule with expected values (read-only)",
+    )
+    verify.add_argument("changes", nargs="+", metavar="key=value")
     return parser
 
 
@@ -122,6 +130,26 @@ def cmd_plan(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_verify(args: argparse.Namespace) -> int:
+    """Read the live registers and report drift against expected values."""
+    changes = parse_assignments(args.changes)
+    with WriteClient(_config(args)) as client:
+        registers = _read_tou(client)
+    drift = 0
+    for key, value in changes.items():
+        target = resolve(key, include_unverified=args.include_unverified)
+        expected = target.to_raw(value)
+        current = registers.get(target.address)
+        ok = matches(target, expected, current)
+        actual = target.describe(current) if current is not None else "?"
+        status = "MATCH" if ok else "DRIFT"
+        expected_text = target.describe(expected)
+        print(f"  {status:<6}{key:<22} expected {expected_text:<10} actual {actual}")
+        drift += 0 if ok else 1
+    print(f"{len(changes) - drift}/{len(changes)} match")
+    return 1 if drift else 0
+
+
 def cmd_set(args: argparse.Namespace) -> int:
     """Apply changes when ``--confirm`` is given, otherwise behave like ``plan``."""
     changes = parse_assignments(args.changes)
@@ -151,7 +179,7 @@ def cmd_set(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     """Entry point for the ``dmon-write`` command."""
     args = build_parser().parse_args(argv)
-    handlers = {"list": cmd_list, "plan": cmd_plan, "set": cmd_set}
+    handlers = {"list": cmd_list, "plan": cmd_plan, "set": cmd_set, "verify": cmd_verify}
     try:
         return handlers[args.command](args)
     except (RegisterNotAllowed, WriteValueError) as error:

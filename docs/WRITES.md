@@ -32,9 +32,13 @@ dmon-write list                       # allow-list with current values (read-onl
 dmon-write plan tou.1.power=5500      # validate, print the change, write nothing
 dmon-write set tou.1.power=5500       # dry run as well (no --confirm)
 dmon-write set tou.1.power=5500 --confirm
+dmon-write verify tou.1.power=5500 tou.1.start=100   # read-only drift check
 ```
 
-`list` and `plan` only read registers; they are safe to run at any time.
+`list`, `plan` and `verify` only read registers; they are safe to run at any time.
+
+`verify` is the check to use after a manual change on the inverter screen, or before trusting an
+automation: it compares the live schedule with the expected values and exits `1` on drift.
 
 ## Safety behaviour
 

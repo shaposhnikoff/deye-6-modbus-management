@@ -77,8 +77,12 @@ def render(snapshot: CacheSnapshot, page: str, columns: int = 96) -> Image.Image
             draw.text((PAD_X, y), f"[{row.section}]", font=font, fill=MUTED)
         else:
             draw.text((PAD_X, y), row.label, font=font, fill=STATUS_COLOR.get(row.status, FG))
-            draw.text((PAD_X + char_width * 20, y), row.text, font=font,
-                      fill=STATUS_COLOR.get(row.status, FG))
+            draw.text(
+                (PAD_X + char_width * 20, y),
+                row.text,
+                font=font,
+                fill=STATUS_COLOR.get(row.status, FG),
+            )
         y += LINE
 
     footer = " q quit   p pause   + / - interval   1 / 2 page   r redraw "

@@ -279,6 +279,15 @@ def apply_change(client: WriteClient, change: PlannedWrite) -> None:
         raise WriteVerificationError(f"{target.key}: wrote {change.raw}, read back {actual}")
 
 
+def matches(target: WriteTarget, expected_raw: int, current_raw: int | None) -> bool:
+    """True when the live register already equals the expected encoded value."""
+    if current_raw is None:
+        return False
+    if target.bit is not None:
+        return ((current_raw >> target.bit) & 1) == expected_raw
+    return current_raw == expected_raw
+
+
 def audit(path: str, change: PlannedWrite, *, serial_number: str | None, confirmed: bool) -> None:
     """Append one JSON line describing the intended or performed change."""
     record = {
