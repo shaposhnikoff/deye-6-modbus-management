@@ -103,21 +103,31 @@ def decode_register(registers: dict[int, int], register: Register) -> Reading | 
     )
 
 
-def decode(registers: dict[int, int]) -> list[Reading]:
-    """Decode every known register, skipping missing or zero-valued entries."""
+def decode(registers: dict[int, int], include_zero: bool = False) -> list[Reading]:
+    """Decode every known register.
+
+    Zero values are skipped by default to keep CLI output readable. Pass ``include_zero=True``
+    when the result feeds Home Assistant: a sensor whose value happens to be zero must still be
+    published, otherwise it disappears from the entity registry.
+    """
     readings: list[Reading] = []
     for register in REGISTERS:
         reading = decode_register(registers, register)
-        if reading is not None and reading.value != 0:
-            readings.append(reading)
+        if reading is None:
+            continue
+        if reading.value == 0 and not include_zero:
+            continue
+        readings.append(reading)
     return readings
 
 
-def decode_all(registers: dict[int, int]) -> tuple[list[Reading], TouState | None]:
+def decode_all(
+    registers: dict[int, int], include_zero: bool = False
+) -> tuple[list[Reading], TouState | None]:
     """Decode the standard map plus the Time-of-Use block."""
     from deye_monitoring import tou
 
-    readings = decode(registers)
+    readings = decode(registers, include_zero=include_zero)
     state = tou.parse(registers)
     if state is not None:
         readings.extend(tou.readings(state))

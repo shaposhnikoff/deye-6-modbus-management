@@ -195,8 +195,9 @@ Topics:
 - `homeassistant/sensor/deye_6k/<unique_id>/config` — retained discovery config per sensor.
 
 Home Assistant picks the entities up automatically as a `Deye SUN-6K` device; no YAML needed.
-Discovery is generated from the values actually published, so sensors for hardware this model does
-not have (L2/L3 phases, PV3/PV4) are never announced.
+Discovery is generated from the values actually published. The cache therefore keeps zero-valued
+registers: a sensor that happens to read 0 W (PV at night, idle load) must stay in the registry
+instead of disappearing until sunrise.
 
 Two gotchas worth remembering:
 
@@ -246,6 +247,10 @@ The same data as a Home Assistant device, created by MQTT discovery — no YAML,
 activity included:
 
 ![Home Assistant device](docs/assets/home-assistant.png)
+
+Prometheus sees the exporter as a normal target (`deye-modbus`, scrape 30 s, last scrape 18 ms):
+
+![Prometheus target](docs/assets/prometheus-targets.png)
 
 The terminal frames are generated from live cache data with
 `uv run --with pillow python tools/render_tui_png.py docs/assets/dmon-top.png docs/assets/dmon-top-tou.png`

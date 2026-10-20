@@ -163,3 +163,13 @@ def test_exported_tou_metric_has_slot_label(state: tou.TouState) -> None:
     assert 'deye_tou_slot_power_watts{group="tou",serial="2601255637",slot="1"} 5000' in text
     assert 'deye_tou_day{group="tou",serial="2601255637",day="mon"} 1' in text
     assert 'deye_tou_charge{group="tou",serial="2601255637",slot="1",source="gen"} 0' in text
+
+
+def test_decode_can_include_zero_values(registers: dict[int, int]) -> None:
+    """Zero registers must survive for Home Assistant: a 0 W sensor still exists."""
+    from deye_monitoring.snapshot import decode
+
+    without = {reading.name for reading in decode(registers)}
+    with_zero = {reading.name for reading in decode(registers, include_zero=True)}
+    assert without < with_zero
+    assert len(with_zero) >= 60

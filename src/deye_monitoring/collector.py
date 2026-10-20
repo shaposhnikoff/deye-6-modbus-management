@@ -28,7 +28,7 @@ def modbus_reader(config: ModbusConfig) -> Reader:
 
         with ModbusClient(config) as client:
             registers = read_registers(client)
-        readings, _tou_state = decode_all(registers)
+        readings, _tou_state = decode_all(registers, include_zero=True)
         return readings, serial_number(registers)
 
     return read
