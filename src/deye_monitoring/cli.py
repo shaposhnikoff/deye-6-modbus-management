@@ -74,10 +74,25 @@ def build_parser() -> argparse.ArgumentParser:
         help="seconds between Modbus polls (default: %(default)s)",
     )
     serve.add_argument(
+        "--mqtt",
+        action="store_true",
+        help="publish state and Home Assistant discovery over MQTT",
+    )
+    serve.add_argument(
         "--notify",
         action="store_true",
         help="send Telegram alerts (needs DEYE_TELEGRAM_TOKEN and DEYE_TELEGRAM_CHAT_ID)",
     )
+    mqtt_cmd = subparsers.add_parser(
+        "mqtt", parents=[common], help="run collector and publish to MQTT only"
+    )
+    mqtt_cmd.add_argument("--interval", type=float, default=10.0)
+    mqtt_cmd.add_argument("--broker", default=os.environ.get("DEYE_MQTT_HOST", "192.168.10.68"))
+    mqtt_cmd.add_argument(
+        "--broker-port", type=int, default=int(os.environ.get("DEYE_MQTT_PORT", "1883"))
+    )
+    mqtt_cmd.add_argument("--prefix", default=os.environ.get("DEYE_MQTT_PREFIX", "homeassistant"))
+    mqtt_cmd.add_argument("--node", default=os.environ.get("DEYE_MQTT_NODE", "deye_6k"))
     return parser
 
 
@@ -173,6 +188,33 @@ def cmd_watch(args: argparse.Namespace) -> int:
         time.sleep(max(args.interval - elapsed, 0.0))
 
 
+def _mqtt_publisher(args: argparse.Namespace):
+    from deye_monitoring.mqtt import MqttConfig, MqttPublisher
+
+    config = MqttConfig(
+        host=getattr(args, "broker", None) or os.environ.get("DEYE_MQTT_HOST", "192.168.10.68"),
+        port=getattr(args, "broker_port", None) or int(os.environ.get("DEYE_MQTT_PORT", "1883")),
+        username=os.environ.get("DEYE_MQTT_USER"),
+        password=os.environ.get("DEYE_MQTT_PASSWORD"),
+        prefix=getattr(args, "prefix", None)
+        or os.environ.get("DEYE_MQTT_PREFIX", "homeassistant"),
+        node=getattr(args, "node", None) or os.environ.get("DEYE_MQTT_NODE", "deye_6k"),
+    )
+    return MqttPublisher(config)
+
+
+def _chain(*callbacks):
+    active = [callback for callback in callbacks if callback is not None]
+    if not active:
+        return None
+
+    def handle(sample):
+        for callback in active:
+            callback(sample)
+
+    return handle
+
+
 def _notify_config() -> NotifyConfig:
     return NotifyConfig(
         token=os.environ.get("DEYE_TELEGRAM_TOKEN"),
@@ -197,10 +239,16 @@ def cmd_serve(args: argparse.Namespace) -> int:
                 flush=True,
             )
 
+    publisher = _mqtt_publisher(args) if args.mqtt else None
+    if publisher is not None:
+        publisher.connect()
+
     collector = Collector(
         modbus_reader(_config(args)),
         interval=args.interval,
-        on_sample=notifier.handle if notifier else None,
+        on_sample=_chain(
+            notifier.handle if notifier else None, publisher.handle if publisher else None
+        ),
     )
     server = create_server(args.listen, collector)
     stop = threading.Event()
@@ -228,6 +276,37 @@ def cmd_serve(args: argparse.Namespace) -> int:
         server.shutdown()
         server.server_close()
         collector.stop()
+        if publisher is not None:
+            publisher.close()
+    return 0
+
+
+def cmd_mqtt(args: argparse.Namespace) -> int:
+    """Run the collector and publish to MQTT until interrupted."""
+    publisher = _mqtt_publisher(args)
+    publisher.connect()
+    collector = Collector(
+        modbus_reader(_config(args)), interval=args.interval, on_sample=publisher.handle
+    )
+    collector.start()
+    print(
+        f"publishing to {args.broker}:{args.broker_port} node {args.node} "
+        f"(interval {args.interval:g}s)",
+        flush=True,
+    )
+    stop = threading.Event()
+
+    def handle_signal(signum: int, _frame: object) -> None:
+        print(f"received signal {signum}, stopping", file=sys.stderr, flush=True)
+        stop.set()
+
+    for signum in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(signum, handle_signal)
+    try:
+        stop.wait()
+    finally:
+        collector.stop()
+        publisher.close()
     return 0
 
 
@@ -240,6 +319,7 @@ def main(argv: list[str] | None = None) -> int:
         "dump": cmd_dump,
         "watch": cmd_watch,
         "serve": cmd_serve,
+        "mqtt": cmd_mqtt,
     }
     try:
         return handlers[args.command](args)

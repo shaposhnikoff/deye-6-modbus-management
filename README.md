@@ -118,6 +118,32 @@ Alerts: Modbus reads failing, stale data, over-temperature, running status `faul
 A `RECOVERED` message is sent when an alert clears, and a cooldown keeps a flapping line from
 spamming the chat. Without a token the service logs `telegram disabled` and keeps monitoring.
 
+## MQTT / Home Assistant
+
+The exporter can also publish to MQTT, either together with Prometheus (`serve --mqtt`) or alone
+(`dmon mqtt`). Both own the serial port, so run only one of them.
+
+```bash
+uv run dmon mqtt --broker 192.168.10.68 --interval 10        # MQTT only
+uv run dmon serve --mqtt                                    # metrics + MQTT in one process
+```
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `DEYE_MQTT_HOST` | `192.168.10.68` | broker address |
+| `DEYE_MQTT_PORT` | `1883` | broker port |
+| `DEYE_MQTT_USER` / `DEYE_MQTT_PASSWORD` | — | credentials, if the broker requires them |
+| `DEYE_MQTT_PREFIX` | `homeassistant` | discovery prefix |
+| `DEYE_MQTT_NODE` | `deye_6k` | node id used in topics and unique ids |
+
+Topics:
+
+- `deye/state` — retained JSON: `{"timestamp", "serial", "online", "values": {...}}`;
+- `deye/availability` — `online` / `offline`, with a last-will so a crash is visible;
+- `homeassistant/sensor/deye_6k/<unique_id>/config` — retained discovery config per sensor.
+
+Home Assistant picks the entities up automatically as a `Deye SUN-6K` device; no YAML needed.
+
 ## Writing (Time-of-Use)
 
 Monitoring stays read-only. Changing the schedule is a separate, explicit command:
@@ -174,6 +200,7 @@ src/deye_monitoring/
   tou.py         # Time-of-Use decoder (slots, charge bits)
   write.py       # guarded writes, allow-list, readback, audit
   write_cli.py   # dmon-write list / plan / set
+  mqtt.py        # state + Home Assistant discovery
 tools/
   generate_registers.py  # regenerates registers.py from the vendored map
   upstream-map/*.yaml    # vendored ESPHome register definitions
