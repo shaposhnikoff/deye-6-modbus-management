@@ -1,5 +1,7 @@
 # Runbook: changing one parameter on the inverter
 
+> Русская версия: [RUNBOOK-WRITE.ru.md](RUNBOOK-WRITE.ru.md)
+
 Short procedure for an operator at a shell on the Pi. Goal: change an allow-listed setting, prove
 it was applied, and be able to undo it.
 
