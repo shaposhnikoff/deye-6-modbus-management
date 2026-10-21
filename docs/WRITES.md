@@ -5,6 +5,9 @@ through the separate `dmon-write` command, which a human runs on purpose. `dmon 
 imports the write module, and the read-only `ModbusClient` gains no write methods — the write
 client is a subclass that exists only in that module.
 
+Step-by-step operator procedure, including the maintenance window and rollback:
+[RUNBOOK-WRITE.md](RUNBOOK-WRITE.md).
+
 ## Allow-list
 
 Only Time-of-Use registers are writable. Anything else is refused with exit code `2`.

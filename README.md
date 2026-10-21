@@ -294,7 +294,8 @@ uv run dmon-write verify tou.1.power=5500                     # read-only drift 
 
 Every write is range-checked, read back from the inverter and appended to
 `/var/log/deye/writes.log`. Bit targets (grid/gen charge) use read-modify-write so the GM/BU/CH
-bits survive. See [docs/WRITES.md](docs/WRITES.md) for the allow-list, formats and exit codes.
+bits survive. See [docs/WRITES.md](docs/WRITES.md) for the allow-list, formats and exit codes, and
+[docs/RUNBOOK-WRITE.md](docs/RUNBOOK-WRITE.md) for the step-by-step operator procedure.
 
 ## Register map
 

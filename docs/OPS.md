@@ -41,6 +41,18 @@ curl -s localhost:9101/health
 
 If a unit refused to start several times: `sudo systemctl reset-failed deye-monitoring`.
 
+## Writing to the inverter
+
+Monitoring is read-only; changing a setting is a deliberate, human-run operation:
+
+1. `sudo systemctl stop deye-monitoring` — the collector owns `/dev/modbus` exclusively;
+2. `dmon-write list`, then `plan <key>=<value>`;
+3. `set <key>=<value> --confirm`, then `verify <key>=<value>`;
+4. `sudo systemctl start deye-monitoring`, check `/health`;
+5. read `/var/log/deye/writes.log` for the `from_raw`/`to_raw` pair.
+
+Full procedure, allow-list and troubleshooting: [RUNBOOK-WRITE.md](RUNBOOK-WRITE.md).
+
 ## Rollback
 
 1. Code: `git checkout <previous-commit> && uv sync --extra mqtt && systemctl restart ...`
