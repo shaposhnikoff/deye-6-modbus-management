@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-10-21
+
+- writes now use FC16: the SUN-6K firmware ignores FC6 (empty reply) but acknowledges a
+  one-register FC16 frame, so `dmon-write set` works end to end
+- first confirmed TOU write: grid charge limited to the 23:00–07:00 window, readback `8/8 match`
+- audit log records the whole written word for bit targets, not just the bit value, and the
+  inverter serial is read from registers `0x0003` instead of the TOU block (it was always null)
+- `dmon-write` prints a clear hint when the collector holds the serial port instead of a traceback
+
 ## 2026-10-20
 
 First working deployment on a Raspberry Pi in front of a Deye SUN-6K-SG05LP1.

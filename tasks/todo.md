@@ -24,7 +24,9 @@ blocked. Chat progress reports are written in Russian; this file stays in Englis
 ## Next
 
 - [x] `dmon-write verify` — compare the live schedule with an expected one (read-only)
-- [ ] Operator verifies TOU writes against the inverter screen, then writes are enabled in practice
+- [x] First confirmed TOU write: night charge window 23:00–07:00 (FC16, readback `8/8 match`)
+- [ ] Operator checks the new schedule on the inverter screen
+- [ ] Observe the night-charge window for a week before any automation calls `dmon-write`
 
 ## Blocked
 
