@@ -29,9 +29,13 @@ jobs:
 
       - name: Validate monitoring configs
         run: |
-          docker run --rm -v "$PWD/Monitoring/prometheus:/etc/prometheus" \
+          # prom/prometheus defaults to ENTRYPOINT /bin/prometheus, so promtool
+          # has to be selected explicitly.
+          docker run --rm --entrypoint /bin/promtool \
+            -v "$PWD/Monitoring/prometheus:/etc/prometheus" \
             prom/prometheus:v2.54.1 \
-            promtool check config /etc/prometheus/prometheus.yml
-          docker run --rm -v "$PWD/Monitoring/prometheus:/etc/prometheus" \
+            check config /etc/prometheus/prometheus.yml
+          docker run --rm --entrypoint /bin/promtool \
+            -v "$PWD/Monitoring/prometheus:/etc/prometheus" \
             prom/prometheus:v2.54.1 \
-            promtool check rules /etc/prometheus/rules/deye.rules
+            check rules /etc/prometheus/rules/deye.rules
