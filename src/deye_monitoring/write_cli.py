@@ -10,8 +10,10 @@ import argparse
 import os
 import sys
 
+import serial
+
 from deye_monitoring.modbus import ModbusConfig, ModbusError
-from deye_monitoring.snapshot import serial_number
+from deye_monitoring.snapshot import SERIAL_START, SERIAL_WORDS, serial_number
 from deye_monitoring.write import (
     TARGETS,
     PlannedWrite,
@@ -96,6 +98,11 @@ def _read_tou(client: WriteClient) -> dict[int, int]:
     return {TOU_FIRST + index: word for index, word in enumerate(words)}
 
 
+def _serial_number(client: WriteClient) -> str | None:
+    words = client.read_holding_registers(SERIAL_START, SERIAL_WORDS)
+    return serial_number(dict(enumerate(words, start=SERIAL_START)))
+
+
 def _plan(client: WriteClient, changes: dict[str, float], include_unverified: bool):
     registers = _read_tou(client)
     planned: list[PlannedWrite] = []
@@ -155,8 +162,7 @@ def cmd_set(args: argparse.Namespace) -> int:
     changes = parse_assignments(args.changes)
     with WriteClient(_config(args)) as client:
         planned = _plan(client, changes, args.include_unverified)
-        registers = _read_tou(client)
-        serial = serial_number(registers)
+        serial = _serial_number(client)
         for change in planned:
             print(f"  {'write' if args.confirm else 'plan '}  {change.describe()}")
         if not args.confirm:
@@ -165,14 +171,20 @@ def cmd_set(args: argparse.Namespace) -> int:
         failures = 0
         for change in planned:
             try:
-                apply_change(client, change)
+                written = apply_change(client, change)
             except WriteVerificationError as error:
                 failures += 1
                 print(f"  FAILED  {error}", file=sys.stderr)
                 audit(args.log, change, serial_number=serial, confirmed=False)
             else:
                 print(f"  ok      {change.target.key} verified by readback")
-                audit(args.log, change, serial_number=serial, confirmed=True)
+                audit(
+                    args.log,
+                    change,
+                    serial_number=serial,
+                    confirmed=True,
+                    written_raw=written,
+                )
     return 3 if failures else 0
 
 
@@ -187,6 +199,13 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     except ModbusError as error:
         print(f"modbus error: {error}", file=sys.stderr)
+        return 1
+    except serial.SerialException as error:
+        print(
+            f"serial error: {error}\n"
+            "is deye-monitoring.service holding the port? stop it first (docs/WRITES.md)",
+            file=sys.stderr,
+        )
         return 1
     except KeyboardInterrupt:
         return 130

@@ -35,17 +35,50 @@ dmon-write set tou.1.power=5500 --confirm
 dmon-write verify tou.1.power=5500 tou.1.start=100   # read-only drift check
 ```
 
-`list`, `plan` and `verify` only read registers; they are safe to run at any time.
+`list`, `plan` and `verify` never change anything, but they still open the serial port, so they
+need it free (see below).
 
 `verify` is the check to use after a manual change on the inverter screen, or before trusting an
 automation: it compares the live schedule with the expected values and exits `1` on drift.
 
+## Serial port ownership
+
+The collector owns `/dev/modbus` and opens it with `exclusive=True`; every `dmon-write` command
+tries to take the same lock. While `deye-monitoring.service` runs, `list`, `plan`, `set` and
+`verify` all fail at `connect()` with a busy port instead of fighting for the bus.
+
+Stop the collector, do the work, start it again:
+
+```bash
+sudo systemctl stop deye-monitoring.service
+# ... dmon-write list / plan / set / verify ...
+sudo systemctl start deye-monitoring.service
+```
+
+Prometheus marks the target down within a few minutes and `DeyeDataStale` fires after two, so keep
+a planned change inside a two-minute window. `deye-mqtt.service` does not own the serial port and
+can keep running.
+
+The audit log directory is not created by the service account. Create it once:
+
+```bash
+sudo install -d -o max -g max /var/log/deye
+```
+
+Without it every write still happens, but the audit line is lost and the CLI only prints a
+permission warning.
+
 ## Safety behaviour
 
 1. **Validation before framing** — a bad value never reaches the serial port.
-2. **Readback** — after FC6 the register is read again and compared; a mismatch raises
+2. **Readback** — after FC16 the register is read again and compared; a mismatch raises
    `WriteVerificationError` (exit code `3`).
-3. **Echo check** — the FC6 reply must equal the request frame byte for byte.
+3. **Echo check** — FC16 echoes the request header (slave, function, address, count) plus CRC;
+   anything else is a verification failure.
+
+The SUN-6K firmware on this inverter **silently ignores FC6** (write single register): the reply
+is empty while FC3 reads keep working. Every write is therefore sent as a one-register FC16 frame,
+which the inverter acknowledges with the eight-byte header echo.
 4. **Audit log** — every confirmed or failed attempt appends one JSON line to
    `/var/log/deye/writes.log` (override with `--log` or `DEYE_WRITE_LOG`):
 
@@ -76,5 +109,6 @@ were confirmed. Re-running the same command is safe: values are absolute, not re
 
 - Charge/discharge current limits, `Grid Charge Enable` (233), `Solar Sell` (247) and other
   configuration registers — no allow-list entries, so they cannot be written.
-- Automatic control (price-based scheduling). Until a manual change has been verified on the
-  device, nothing should call `dmon-write set --confirm` from a script.
+- Automatic control (price-based scheduling). The first manual TOU write was verified on
+  2026-10-21; still, nothing should call `dmon-write set --confirm` from a script until the night
+  window has been observed for a week.

@@ -1,4 +1,4 @@
-"""Guarded write support: Modbus FC6 frames, an allow-list, readback checks and an audit log.
+"""Guarded write support: Modbus FC16 frames, an allow-list, readback checks and an audit log.
 
 Deliberately separate from the monitoring path: ``dmon serve`` never imports this module, and the
 read-only ``ModbusClient`` gains no write methods. A human runs ``dmon-write`` explicitly.
@@ -224,24 +224,37 @@ class WriteClient(ModbusClient):
     Lives here, not in ``modbus``, so the monitoring service has no write code path at all.
     """
 
-    def write_register(self, address: int, value: int) -> None:
-        """Write one holding register with FC6 and check the echoed frame."""
+    def write_registers(self, address: int, values: list[int]) -> None:
+        """Write holding registers with FC16 and check the echoed header.
+
+        The SUN-6K firmware used here silently ignores FC6 for the Time-of-Use block and only
+        answers FC16, so every write goes through this function.
+        """
+        if not values:
+            raise ValueError("values must not be empty")
         if self._serial is None:
             raise RuntimeError("port is not open, call connect() first")
-        frame = build_write_frame(self.config.slave, address, value)
+        frame = build_write_multiple_frame(self.config.slave, address, values)
+        header = frame[:6]  # slave, function, address, register count
+        crc = crc16(header)
+        expected = header + bytes([crc & 0xFF, crc >> 8])
         try:
             self._serial.reset_input_buffer()
             self._serial.write(frame)
             self._serial.flush()
-            reply = self._serial.read(len(frame))
+            reply = self._serial.read(len(expected))
         except serial.SerialException as error:
             raise RuntimeError(f"serial I/O failed: {error}") from error
-        if len(reply) != len(frame):
-            raise WriteVerificationError(f"no echo for write at 0x{address:04X}")
-        if reply != frame:
+        if not reply:
+            raise WriteVerificationError(f"no reply for write at 0x{address:04X}")
+        if reply != expected:
             raise WriteVerificationError(
                 f"echo mismatch at 0x{address:04X}: sent {frame.hex(' ')}, got {reply.hex(' ')}"
             )
+
+    def write_register(self, address: int, value: int) -> None:
+        """Write one holding register as a single-register FC16 frame."""
+        self.write_registers(address, [value])
 
 
 def build_read_frame_for(slave: int, address: int, count: int = 1) -> bytes:
@@ -269,8 +282,8 @@ def plan_change(target: WriteTarget, value: float, current: int | None) -> Plann
     return PlannedWrite(target=target, value=value, raw=target.to_raw(value), current=current)
 
 
-def apply_change(client: WriteClient, change: PlannedWrite) -> None:
-    """Write one register (or one bit) and verify it by reading it back."""
+def apply_change(client: WriteClient, change: PlannedWrite) -> int:
+    """Write one register (or one bit), verify it by readback, return the written word."""
     target = change.target
     if target.bit is not None:
         current = client.read_holding_registers(target.address, 1)[0]
@@ -282,12 +295,13 @@ def apply_change(client: WriteClient, change: PlannedWrite) -> None:
                 f"{target.key}: wanted {int(change.value)}, "
                 f"read back bit {target.bit} of 0x{actual:04X}"
             )
-        return
+        return new_word
 
     client.write_register(target.address, change.raw)
     actual = client.read_holding_registers(target.address, 1)[0]
     if actual != change.raw:
         raise WriteVerificationError(f"{target.key}: wrote {change.raw}, read back {actual}")
+    return change.raw
 
 
 def matches(target: WriteTarget, expected_raw: int, current_raw: int | None) -> bool:
@@ -299,15 +313,25 @@ def matches(target: WriteTarget, expected_raw: int, current_raw: int | None) -> 
     return current_raw == expected_raw
 
 
-def audit(path: str, change: PlannedWrite, *, serial_number: str | None, confirmed: bool) -> None:
-    """Append one JSON line describing the intended or performed change."""
+def audit(
+    path: str,
+    change: PlannedWrite,
+    *,
+    serial_number: str | None,
+    confirmed: bool,
+    written_raw: int | None = None,
+) -> None:
+    """Append one JSON line describing the intended or performed change.
+
+    ``written_raw`` carries the whole word for bit targets, where ``change.raw`` is only 0 or 1.
+    """
     record = {
         "timestamp": datetime.now(UTC).isoformat(timespec="seconds"),
         "serial": serial_number,
         "key": change.target.key,
         "address": f"0x{change.target.address:04X}",
         "from_raw": change.current,
-        "to_raw": change.raw,
+        "to_raw": change.raw if written_raw is None else written_raw,
         "value": change.value,
         "confirmed": confirmed,
     }

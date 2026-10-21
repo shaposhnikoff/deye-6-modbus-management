@@ -5,10 +5,16 @@ from __future__ import annotations
 import json
 
 import pytest
+import serial
 
 from deye_monitoring import write_cli
 
 TOU_BLOCK = {
+    3: 0x3236,  # serial "2601255637"
+    4: 0x3031,
+    5: 0x3235,
+    6: 0x3536,
+    7: 0x3337,
     248: 255,
     250: 100,
     251: 500,
@@ -138,6 +144,7 @@ def test_set_with_confirm_writes_and_audits(
     record = json.loads(log.read_text().splitlines()[0])
     assert record["key"] == "tou.1.power"
     assert record["confirmed"] is True
+    assert record["serial"] == "2601255637"
     assert "verified by readback" in capsys.readouterr().out
 
 
@@ -151,6 +158,22 @@ def test_set_bit_target_preserves_gm_bit(fake_client: type[FakeClient], tmp_path
     )
     # 5 = grid+GM -> clearing grid keeps GM: 4
     assert _last().writes == [(274, 4)]
+    record = json.loads(log.read_text().splitlines()[0])
+    assert record["from_raw"] == 5
+    assert record["to_raw"] == 4
+
+
+def test_busy_port_exits_1_with_hint(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    def busy(*_args: object, **_kwargs: object) -> None:
+        raise serial.SerialException("could not open port /dev/modbus: [Errno 16] busy")
+
+    monkeypatch.setattr(write_cli, "WriteClient", busy)
+    assert write_cli.main(["list", "--port", "fake"]) == 1
+    err = capsys.readouterr().err
+    assert "deye-monitoring.service" in err
+    assert "stop it first" in err
 
 
 def test_unknown_key_exits_2(fake_client: type[FakeClient]) -> None:

@@ -5,7 +5,9 @@ is untouched by this path: the module is not imported by `dmon serve`.
 
 ```mermaid
 flowchart TD
-    A["dmon-write set tou.1.power=5500"] --> B{key on allow-list}
+    A["dmon-write set tou.1.power=5500"] --> A2{serial port free}
+    A2 -- no --> A3[exit 1, stop deye-monitoring.service first]
+    A2 -- yes --> B{key on allow-list}
     B -- no --> C[exit 2, refused]
     B -- yes --> D{value in range}
     D -- no --> C
@@ -13,9 +15,9 @@ flowchart TD
     E --> F[print planned change, dry run]
     F --> G{--confirm given}
     G -- no --> H[exit 0, nothing written]
-    G -- yes --> I[build FC6 frame with CRC]
+    G -- yes --> I[build one-register FC16 frame with CRC]
     I --> J[write register]
-    J --> K{echo equals request}
+    J --> K{echo equals header}
     K -- no --> L[WriteVerificationError, exit 3]
     K -- yes --> M[read register back]
     M --> N{value matches}
@@ -36,8 +38,9 @@ sequenceDiagram
     Op->>CLI: set tou.3.gen_charge=1 --confirm
     CLI->>Inv: FC3 read 0x0114 (current 5 = grid+GM)
     CLI->>CLI: new = 5 OR bit1 = 7
-    CLI->>Inv: FC6 write 0x0114 = 7
-    Inv-->>CLI: echo 7
+    CLI->>Inv: FC16 write 0x0114 = 7 (one register)
+    Inv-->>CLI: echo slave, 0x10, address, count
+    CLI->>CLI: header echo matches
     CLI->>Inv: FC3 read 0x0114
     Inv-->>CLI: 7
     CLI->>CLI: verify bit1 == 1, then audit

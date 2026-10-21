@@ -6,9 +6,11 @@ import json
 
 import pytest
 
+from deye_monitoring.modbus import ModbusConfig
 from deye_monitoring.write import (
     TARGETS,
     RegisterNotAllowed,
+    WriteClient,
     WriteValueError,
     WriteVerificationError,
     apply_change,
@@ -45,6 +47,60 @@ def test_write_frame_matches_known_vector() -> None:
 def test_write_frame_high_byte_first() -> None:
     frame = build_write_frame(1, 0x0112, 5)
     assert frame[2:6] == bytes([0x01, 0x12, 0x00, 0x05])
+
+
+class FakeSerial:
+    """Minimal pyserial stand-in that replays one prepared reply."""
+
+    def __init__(self, reply: bytes = b"") -> None:
+        self.reply = reply
+        self.written = b""
+
+    def reset_input_buffer(self) -> None:
+        return None
+
+    def write(self, data: bytes) -> int:
+        self.written += data
+        return len(data)
+
+    def flush(self) -> None:
+        return None
+
+    def read(self, size: int) -> bytes:
+        chunk, self.reply = self.reply[:size], self.reply[size:]
+        return chunk
+
+
+def _echo_for(address: int, count: int, slave: int = 1) -> bytes:
+    header = bytes([slave, 0x10, address >> 8, address & 0xFF, 0x00, count])
+    crc = crc16(header)
+    return header + bytes([crc & 0xFF, crc >> 8])
+
+
+def _write_client(reply: bytes) -> WriteClient:
+    client = WriteClient(ModbusConfig(port="fake"))
+    client._serial = FakeSerial(reply)  # noqa: SLF001 - test double
+    return client
+
+
+def test_write_register_uses_fc16() -> None:
+    # This firmware ignores FC6 and only answers FC16.
+    client = _write_client(_echo_for(0x00FF, 1))
+    client.write_register(0x00FF, 2100)
+    assert client._serial.written == build_write_multiple_frame(1, 0x00FF, [2100])  # noqa: SLF001
+    assert client._serial.written[1] == 0x10  # noqa: SLF001
+
+
+def test_write_register_reports_missing_reply() -> None:
+    client = _write_client(b"")
+    with pytest.raises(WriteVerificationError, match="no reply"):
+        client.write_register(0x00FF, 2100)
+
+
+def test_write_register_reports_echo_mismatch() -> None:
+    client = _write_client(_echo_for(0x00FE, 1))
+    with pytest.raises(WriteVerificationError, match="echo mismatch"):
+        client.write_register(0x00FF, 2100)
 
 
 def test_write_multiple_frame_structure() -> None:
@@ -116,8 +172,17 @@ def test_apply_write_detects_mismatch() -> None:
 def test_bit_write_preserves_other_bits() -> None:
     # current 4 = 0b100 (GM mode only), switching grid charge on must keep bit2.
     client = FakeWriteClient({274: 4})
-    apply_change(client, plan_change(resolve("tou.1.grid_charge"), 1, 4))  # type: ignore[arg-type]
+    word = apply_change(client, plan_change(resolve("tou.1.grid_charge"), 1, 4))  # type: ignore[arg-type]
     assert client.writes == [(274, 5)]
+    assert word == 5
+
+
+def test_audit_records_written_word_for_bits(tmp_path) -> None:
+    # The bit value alone is not enough: the audit must show the whole word that was written.
+    log = tmp_path / "writes.log"
+    change = plan_change(resolve("tou.1.grid_charge"), 0, current=5)
+    audit(str(log), change, serial_number="x", confirmed=True, written_raw=4)
+    assert json.loads(log.read_text().splitlines()[0])["to_raw"] == 4
 
 
 def test_bit_clear_preserves_other_bits() -> None:
